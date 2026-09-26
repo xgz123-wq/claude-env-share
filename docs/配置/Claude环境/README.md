@@ -1,0 +1,48 @@
+# Claude 配置总览
+
+> 更新日期：2026-09-23
+> `docs/配置/Claude环境/` 是 Claude/Clash 配置的唯一位置；桌面快捷方式和总检按「脚本目录往上 3 层 = 项目根」定位，不要改目录名或层级。
+
+## 目录
+
+| 位置 | 内容 |
+|---|---|
+| `Claude环境一键总检.ps1` | 桌面「Claude-环境一键总检」，只读检查 |
+| `启动Claude英文浏览器.ps1`、`Claude官方图标.ico` | 桌面「Claude-英文浏览器」，检查通过才启动 Desktop |
+| `Clash/` | Clash 全局脚本副本（与现场 `Script.js` 一致）、通道验证脚本、桌面「Claude-五项自检」 |
+| `Desktop防护/` | Desktop/Code 直连防护、Desktop 受控更新、43867 通道管理、自动更新开关，以及运行状态 json |
+| `说明/` | [日常使用](说明/日常使用.md)、[账号浏览器](说明/账号浏览器.md)、[DNS 分层](说明/DNS分层说明.md)、[架构讲解](说明/架构讲解.html)（图解，双击打开） |
+| `维护日志.md` | 历次维护结论与证据，只追加 |
+
+- **一次性工具**：安装、回滚、修复 DNS、创建账号浏览器等只在 Skill [claude-safe-network](../../../.agents/skills/claude-safe-network/SKILL.md) 的 `scripts/` 里，本目录不放副本。
+
+## 当前状态（原机器 2026-09-23 参考值，新机器以实测为准）
+
+| 项目 | 现状 |
+|---|---|
+| Claude Desktop | `2.2553.13.0`，自动更新关闭 |
+| Claude Code CLI | `2.1.280`，指纹已同步 |
+| 直连防护 | 3 个程序、6 条 WFP 规则 |
+| 验证 | 一键总检 13 PASS / 1 MANUAL（2026-09-23） |
+
+| 入口 | 路线 |
+|---|---|
+| Claude Code | HTTP `43865`，Claude 域名按规则进 `ACCOUNT-US` |
+| 专用 Chrome | SOCKS `43866 → ACCOUNT-US` |
+| Claude Desktop | HTTP `43867 → ACCOUNT-US` |
+
+## 按任务阅读
+
+| 要做什么 | 入口 |
+|---|---|
+| 理解整体架构、出问题定位到哪一层 | [架构讲解](说明/架构讲解.html) |
+| 每天启动与检查 | [日常使用](说明/日常使用.md) |
+| 更新 Desktop / CLI / 插件，或手动更新后补同步 | 在本项目说「更新 Claude Desktop」等，按 [claude-maintenance](../../../.agents/skills/claude-maintenance/SKILL.md) 执行 |
+| Desktop 更新细则 | [更新维护说明](Desktop防护/更新维护说明.md) |
+| 网络排障、换订阅、改端口 | Skill [claude-safe-network](../../../.agents/skills/claude-safe-network/SKILL.md) |
+| 历次维护与未验收项 | [维护日志](维护日志.md) |
+
+## 约定
+
+- **维护默认**：不启动 Desktop、Code 或浏览器；不改 Clash 生效配置、`ACCOUNT-US` 手选节点、DNS、HKLM 策略。
+- **验收边界**：程序层检查通过不等于真实网页、登录和外部工具都已验证；旧截图、旧版号、旧 IP 不能替代现场检查。
