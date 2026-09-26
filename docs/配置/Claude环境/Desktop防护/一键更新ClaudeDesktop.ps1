@@ -4,6 +4,8 @@ param(
     [ValidateSet('Verify','Update')][string]$Action = 'Verify',
     [string]$PackagePath,
     [string]$ApprovedSHA256,
+    # npm 更新 CLI 后按清单顺序传入三个已审核指纹；与 Desktop 更新共用同一次 UAC，先刷新再迁移。
+    [string[]]$CliApprovedSHA256,
     [string]$ResumeJournal,
     [switch]$Worker,
     [string]$ResultDirectory,
@@ -27,15 +29,35 @@ function Quote-Literal([string]$Value) {
 function Run-Step([string]$Name, [string]$Script, [string[]]$Arguments, [switch]$AllowFailure) {
     $log = Join-Path $ResultDirectory ($Name + '.log')
     $result.Logs += $log
-    $output = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File $Script @Arguments 2>&1 | Out-String
+    # Script 为空时 Arguments 自带 -EncodedCommand，用于要传数组参数的步骤。
+    $invoke = if ($Script) { @('-File',$Script) + $Arguments } else { $Arguments }
+    $output = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive @invoke 2>&1 | Out-String
     $script:stepExit = $LASTEXITCODE
     $output | Set-Content -LiteralPath $log -Encoding utf8
     Save-Result
     if ($script:stepExit -ne 0 -and -not $AllowFailure) { throw ($Name + ' 失败；详情：' + $log) }
     return $output
 }
+function Remove-UsedPackages {
+    # 只删两个固定目录里 Claude-<版本>.msix 形态的安装包；更新成功后它们不再参与恢复或降级。
+    $removed = @(); $errors = @()
+    # Codex 等 MSIX 打包应用发起时，下载目录被重定向到 Packages\<包>\LocalCache\Local，一并清理。
+    $directories = @((Join-Path $env:ProgramData 'ClaudeNetworkGuard'),(Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\Desktop安装包下载')) + @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Packages\*\LocalCache\Local\ClaudeNetworkGuard\Desktop安装包下载') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    foreach ($directory in $directories) {
+        if (-not (Test-Path -LiteralPath $directory)) { continue }
+        foreach ($file in Get-ChildItem -LiteralPath $directory -File | Where-Object { $_.Name -match '^Claude-(\d+(\.\d+){3}|download-\d{8}-\d{6})\.msix$' }) {
+            try { Remove-Item -LiteralPath $file.FullName -Force; $removed += [pscustomobject]@{Path=$file.FullName;SizeMB=[math]::Round($file.Length/1MB,1)} }
+            catch { $errors += ($file.FullName + '：' + $_.Exception.Message) }
+        }
+    }
+    [ordered]@{Removed=$removed;Errors=$errors}
+}
 try {
-    foreach ($value in @($PackagePath,$ApprovedSHA256,$ResumeJournal,$ResultDirectory,$ExpectedUserSid)) { $null = Quote-Literal $value }
+    foreach ($value in @($PackagePath,$ApprovedSHA256,$ResumeJournal,$ResultDirectory,$ExpectedUserSid) + @($CliApprovedSHA256)) { $null = Quote-Literal $value }
+    if ($CliApprovedSHA256) {
+        if ($Action -ne 'Update') { throw 'CliApprovedSHA256 只用于 Update。' }
+        if (@($CliApprovedSHA256).Count -ne 3 -or @($CliApprovedSHA256 | Where-Object { $_ -notmatch '^[a-fA-F0-9]{64}$' }).Count) { throw 'CliApprovedSHA256 必须是按清单顺序的三个 SHA256。' }
+    }
     if (-not $ResultDirectory) { $ResultDirectory = Join-Path $env:LOCALAPPDATA ('ClaudeNetworkGuard\统一维护-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')) }
     $ResultDirectory = [IO.Path]::GetFullPath($ResultDirectory)
     $null = New-Item -ItemType Directory -Path $ResultDirectory -Force
@@ -43,9 +65,12 @@ try {
     Save-Result
     Assert-Closed
     if ($Action -eq 'Update') {
-        if (-not $PackagePath -or $ApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw '更新前必须提供已审核的官方 MSIX 路径和 ApprovedSHA256；本入口不会下载或自行批准安装包。' }
-        $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
-        if ([IO.Path]::GetExtension($PackagePath) -ine '.msix' -or (Get-FileHash -LiteralPath $PackagePath).Hash -ne $ApprovedSHA256) { throw '安装包类型或审核哈希不符。' }
+        if (-not $PackagePath -and -not $CliApprovedSHA256) { throw 'Update 至少要提供 Desktop 安装包（PackagePath + ApprovedSHA256）或 CliApprovedSHA256。' }
+        if ($PackagePath) {
+            if ($ApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw '更新前必须提供已审核的官方 MSIX 路径和 ApprovedSHA256；先用 下载ClaudeDesktop官方包.ps1 下载并审核。' }
+            $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
+            if ([IO.Path]::GetExtension($PackagePath) -ine '.msix' -or (Get-FileHash -LiteralPath $PackagePath).Hash -ne $ApprovedSHA256) { throw '安装包类型或审核哈希不符。' }
+        }
         if ($ResumeJournal) { $ResumeJournal = (Resolve-Path -LiteralPath $ResumeJournal).Path }
     }
     # Docs 是唯一维护源；从技能副本调用时也回到同项目 Docs。
@@ -62,6 +87,7 @@ try {
         foreach ($item in @{PackagePath=$PackagePath;ApprovedSHA256=$ApprovedSHA256;ResumeJournal=$ResumeJournal}.GetEnumerator()) {
             if ($item.Value) { $command += ' -' + $item.Key + ' ' + (Quote-Literal $item.Value) }
         }
+        if ($CliApprovedSHA256) { $command += ' -CliApprovedSHA256 ' + ((@($CliApprovedSHA256) | ForEach-Object { Quote-Literal $_ }) -join ',') }
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         try { $child = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand',$encoded) -Verb RunAs -WindowStyle Hidden -PassThru }
         catch { throw ('管理员授权被取消或无法启动；未重试提权。' + $_.Exception.Message) }
@@ -91,7 +117,13 @@ try {
     if ($packages.Count -ne 1) { throw '当前用户 Claude 安装包不唯一或不存在。' }
     $result.Version = [string]$packages[0].Version
     $updater = Join-Path $source '更新ClaudeDesktop.ps1'
-    if ($Action -eq 'Update') {
+    if ($Action -eq 'Update' -and $CliApprovedSHA256) {
+        # 必须在 Desktop 迁移前刷新：Refresh 要求清单版本等于已装 Desktop，Apply 要求清单指纹等于磁盘文件。
+        $refreshCommand = '& ' + (Quote-Literal (Join-Path $source '应用直连防护管理.ps1')) + ' -Action Refresh -SkipNetworkProbe -ApprovedSHA256 ' + ((@($CliApprovedSHA256) | ForEach-Object { Quote-Literal $_ }) -join ',')
+        $refreshEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($refreshCommand))
+        $null = Run-Step 'CLI指纹刷新' $null @('-EncodedCommand',$refreshEncoded)
+    }
+    if ($Action -eq 'Update' -and $PackagePath) {
         $inspection = Run-Step '安装包检查' $updater @('-Action','Inspect','-PackagePath',$PackagePath) | ConvertFrom-Json
         if ($inspection.SHA256 -ne $ApprovedSHA256 -or $inspection.OldVersion -ne $result.Version) { throw '包检查结果与审核哈希或当前版本不符。' }
         if ([version]$inspection.NewVersion -ne [version]$result.Version) {
@@ -130,6 +162,11 @@ try {
     if ($summaryExit -ne 0 -or $result.Checks.FAIL -gt 0 -or $result.Checks.PASS -eq 0) { throw '日常总检存在失败；详见本次日志。' }
     $null = Run-Step '启动条件检查' (Join-Path (Split-Path $source -Parent) '启动Claude英文浏览器.ps1') @('-CheckOnly')
     Assert-Closed
+    # 只在全部核验通过后清理；失败时安装包要留给 -ResumeJournal 续接。
+    if ($Action -eq 'Update') {
+        $result.Cleanup = Remove-UsedPackages
+        if ($result.Cleanup.Errors.Count) { $result.Checks.WARN++ }
+    }
     $result.Status = if ($result.Checks.WARN -gt 0) { 'passed_with_warnings' } else { 'passed' }
     Save-Result
     Write-Output ('ResultPath=' + $resultPath)

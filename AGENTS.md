@@ -35,7 +35,8 @@
 1. **先读现状**：`docs/配置/Claude环境/README.md` → `维护日志.md` 末尾 → 对应 Skill。
 2. **改前备份**：改动文件复制到 `%LOCALAPPDATA%\ClaudeNetworkGuard\<中文任务名>-<yyyyMMdd-HHmmss>\`。
 3. **改后验证**：一键总检 0 FAIL；动了 Skill 再跑 `Check-SuiteIntegrity.ps1`。
-4. **记录**：`维护日志.md` 末尾追加一节（结论、证据、追溯），不新建记录文件。
+4. **记录**：`维护日志.md` 只保留最近一轮的完整一节，上一轮压成「历史」表一行，不新建记录文件。
+5. **清理**：收尾跑 `docs/配置/Claude环境/清理维护残留.ps1`（默认只列清单），列给用户确认后加 `-Yes` 删除。
 
 ## 约束
 

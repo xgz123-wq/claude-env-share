@@ -1,94 +1,71 @@
 ---
 name: claude-maintenance
-description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code Claude Code 插件。用于更新前检查、受控更新、手动更新后的防护同步及维护文档收尾。复用本项目 Docs 脚本；普通网络排障使用 claude-safe-network。
+description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code Claude Code 插件。用于更新前检查、受控更新、手动更新后的防护同步、残留清理及维护文档收尾。复用本项目 Docs 脚本；普通网络排障使用 claude-safe-network。
 ---
 
 # Claude 更新与防护同步
 
-## 用途与范围
+本文件是维护 SOP 的唯一正文；由本文件向上三级定位项目根目录，根目录缺少 `docs/配置/Claude环境/` 就停止。路径均相对项目根，脚本一律用 PowerShell 7。Docs 是活动源，Skill 里的脚本副本只做同步。
 
-让用户说清更新对象后，完成“检查 → 更新或补同步 → 防护核验 → 必要文档同步”。仅作为本项目维护入口，不安装全局 Skill，不建立定时自动更新。软件及系统防护仍属于本机或当前用户，并非项目独立安装。
-
-本文件是维护 SOP 的唯一 Skill 正文。Claude Code 的项目入口只引用它，不复制流程。由本文件向上三级定位项目根目录；必须确认根目录有下列 Docs 活动维护源，缺失则停止，不从其他项目猜测路径。
-
-## 开始前：识别用户要做什么
+## 识别用户要做什么
 
 | 用户意图 | 动作 |
 |---|---|
-| 看看能否更新、检查状态 | 只读审核，不安装、不刷新基线 |
-| 更新 Desktop App | 走现有 Desktop 受控更新流程 |
-| 更新 CLI | 确认现有安装方式后执行 CLI 更新，并收尾同步 |
-| 更新 VS Code 插件 | 单独处理插件，不顺带更新 npm CLI |
-| 已手动更新，请同步 | 不重复安装，审核变化后恢复防护与记录 |
+| 看看能否更新、检查状态 | 只读：跑下载脚本（已是最新不下载）、`npm view`、`一键更新 -Action Verify` |
+| 更新 Desktop / CLI | 按下面「更新流程」 |
+| 更新 VS Code 插件 | 单独处理，不顺带更新 npm CLI |
+| 已手动更新，请同步 | 跳过安装，从流程第 3 步开始 |
 
-“Claude Code Desktop”等含混称呼不能自动等同于三个产品全更新；上下文无法确定对象时只问这一项。用户已明确要求更新或同步时，不重复询问是否接受同一操作。Windows UAC 属于实际系统授权，不能承诺完全零交互。
+“Claude Code Desktop”等含混称呼不等于三个产品全更新；无法确定对象时只问这一项。用户已明确要求更新时不重复确认。UAC 是系统授权，不能承诺零交互。
 
-## 固定资料与工具
+## 分工：脚本做确定性步骤，Agent 只做判断
 
-路径均相对项目根目录：
-
-| 来源 | 用途 |
+| 由脚本完成（不要手工重做、不要重新搜索） | 由 Agent 判断 |
 |---|---|
-| `docs/配置/Claude环境/README.md` | 人员入口和最近状态摘要 |
-| `docs/配置/Claude环境/Desktop防护/更新维护说明.md` | Desktop 操作细则、防护边界和失败恢复 |
-| 同目录 `一键更新ClaudeDesktop.ps1` | Desktop 的 Verify / Update 入口 |
-| 同目录 `应用直连防护管理.ps1` | 同路径 Refresh 与管理员 Verify |
-| `docs/配置/Claude环境/启动Claude英文浏览器.ps1` | `-CheckOnly`，不启动应用 |
-| `docs/配置/Claude环境/Claude环境一键总检.ps1` | 日常总检，不加 `-OpenBrowser` |
-| `.agents/skills/claude-safe-network/SKILL.md` | 需要处理网络或防护变更时读取 |
+| 识别系统与架构、查最新版、下载、签名与 Manifest 审核：`下载ClaudeDesktop官方包.ps1` | 现场是否适合更新：Claude 进程、策略、上次失败的遗留 |
+| 规则迁移、CLI 指纹刷新、Verify、总检、Skill 副本同步、清理安装包：`一键更新ClaudeDesktop.ps1` | 审核 CLI 新文件的指纹和签名，决定是否批准 |
+| 过期备份与遗留安装包的清单：`清理维护残留.ps1` | 把清理清单列给用户，得到确认后再删除 |
+| 程序与代理检查：`Claude环境一键总检.ps1`、启动器 `-CheckOnly` | 脚本报错时读日志定位原因，按维护说明恢复，不重跑碰运气 |
+| | 插件更新、新路径迁移等脚本不支持的情况：先给方案，不假称已有自动化 |
+| | 收尾写文档：维护日志一节、README 一行 |
 
-先读实际将调用的脚本，核对参数和副作用。使用 PowerShell 7。Docs 是活动脚本源，既有技能脚本副本只做同步，不形成第二套维护实现。
+## 固定来源：不要重新搜索
 
-## SOP：每次按这五步做
+2026-09-25 实测确认；只有脚本报错或结果对不上时才重新查。
 
-### 1. 确认现场
+| 项目 | 固定值 |
+|---|---|
+| Desktop 官方入口 | `https://claude.ai/api/desktop/win32/<x64\|arm64>/msix/latest/redirect`，经 `http://127.0.0.1:43867`；HEAD 返回 405，只能用 GET 读 307 跳转地址 |
+| Desktop 实际下载地址 | `https://downloads.claude.ai/releases/win32/<架构>/<三段版本>/Claude-<提交哈希>.msix`；地址里的版本只用来预判，以包内 Manifest 为准 |
+| Desktop 依据 | [Anthropic Windows 部署说明](https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows)；`claude.com/download` 的 Windows 按钮走同一接口的 `win32/<架构>/setup/…`（exe 安装器），本机装的是 MSIX 包，所以用 `msix`，不从网页抓链接 |
+| 路径里的 `win32` | 是 Windows 平台名（沿用 Node.js 的叫法），不代表 32 位；位数看后面的架构段 `x64` / `arm64` |
+| CLI 包名与位置 | `@anthropic-ai/claude-code`，npm 全局安装，前缀 `%APPDATA%\npm` |
+| CLI 查最新版 | `npm view @anthropic-ai/claude-code version --registry https://registry.npmjs.org` |
+| CLI 安装 | `npm install -g @anthropic-ai/claude-code@<版本> --registry https://registry.npmjs.org`；本机默认源若是国内镜像（如 `registry.npmmirror.com`）也不用；不用 `npm update -g` |
+| 受保护的三个程序 | 以 `Desktop防护/应用过滤目标.json` 的 `Targets` 顺序为准：Desktop `claude.exe`、CLI `bin\claude.exe`、CLI 原生包 `claude-code-win32-x64\claude.exe` |
+| 证据与备份 | `%LOCALAPPDATA%\ClaudeNetworkGuard\`；Codex 桌面版（MSIX 打包应用）写的内容实际在 `%LOCALAPPDATA%\Packages\OpenAI.Codex_<发布者哈希>\LocalCache\Local\ClaudeNetworkGuard\` |
+| 安装包缓存 | `%ProgramData%\ClaudeNetworkGuard\`、`…\ClaudeNetworkGuard\Desktop安装包下载\`；更新成功后自动清空 |
 
-读取实际安装来源、版本、路径、Claude 进程、目标清单、文件签名和 SHA-256；版本从包元数据读取，默认不启动 Claude 来查版本。不输出认证文件或完整设置中的密钥。
+## 更新流程
 
-核对 Desktop 的 HKLM `disableAutoUpdates=1` 与同层 `egressProxyUrl`；CLI 用户设置中的 `DISABLE_AUTOUPDATER=1` 及覆盖层；插件的独立自动更新设置。缺失、冲突或未知要分别报告，不能凭历史记录称为已禁更。发现偏差先列明修复范围，不顺带重写用户设置。
+1. **确认现场**：读版本（从包元数据读，不启动 Claude）、Claude 进程、HKLM `disableAutoUpdates=1` 与同层 `egressProxyUrl`、CLI 的 `DISABLE_AUTOUPDATER=1`。缺失或冲突先报告，不顺带改用户设置；不输出认证文件或密钥。发现 Claude 正在运行就停止安装，不强杀，也不在 Claude Code 会话里更新自身，交给退出后的 Codex 或独立维护进程执行。
+2. **准备**：普通权限运行 `下载ClaudeDesktop官方包.ps1`，`Status=up_to_date` 表示 Desktop 不用更新；需要更新 CLI 时，按固定来源表查版本并安装指定版本。
+3. **审核**：按 `Targets` 顺序读取三个程序的 SHA256 和 Anthropic 签名，逐个核对；不能直接从磁盘取指纹就批准。
+4. **执行（只弹一次 UAC）**：`一键更新ClaudeDesktop.ps1 -Action Update`，传 `-PackagePath` 和 `-ApprovedSHA256`（Desktop 有新版时），以及 `-CliApprovedSHA256 '<h1>','<h2>','<h3>'`（CLI 有变化时）。工作进程依次完成 CLI 指纹刷新、Desktop 迁移、Verify、总检、启动条件检查、Skill 副本同步、安装包清理，结果写入 `统一维护-*\结果.json`。不要再单独以管理员身份跑 `应用直连防护管理.ps1 -Action Refresh`。
+5. **失败时**：停下后续步骤，保留防护、日志和安装包，按 `Desktop防护/更新维护说明.md` 区分注册前、注册后，用 `-ResumeJournal` 续接。没有旧安装包就不承诺降级。
 
-禁用 CLI 自身自动更新不阻止用户主动运行 npm 更新。插件固定版本元数据只是证据之一，不代替核实其有效自动更新设置。
+插件只经 VS Code 官方入口更新 `anthropic.claude-code`；插件内置程序不在防护内，CLI 防护通过不代表插件已覆盖。路径变化必须迁移规则，不能只改哈希。
 
-### 2. 准备更新
+## 收尾：清理与文档
 
-发现正在使用的 Claude 进程时停止安装和基线刷新，不强杀、不在 Claude Code 会话内更新自身。可完成只读准备，然后交给退出后的 Codex 或独立维护进程执行。
+- **清理**：运行 `docs/配置/Claude环境/清理维护残留.ps1`（默认只列清单）。清单为空就结束；不为空就逐条列给用户，确认后加 `-Yes` 删除。规则固定：名称带日期、距今 7 天及以上的备份和日志目录删除；`受控更新-*`、`统一维护-*`、`基线刷新备份-*` 在每个位置各保留最新一份；探针程序不动。
+- **维护日志**：`维护日志.md` 只保留最近一轮维护的完整一节；开始新一轮时，先把上一节压成「历史」表里的一行。同一轮的补充就地改那一节，不追加新节。
+- **README**：只更新当前版本、验证结果和指向维护日志的链接。
+- **说明文档**：`更新维护说明.md` 只在流程或边界变化时改；本 Skill 只在固定来源或分工变化时改。同一事实只写在一处，别处链接过去。
+- **交接**：只在任务未完成、要换会话时写 `docs/handoff/`；任务完成、内容并入维护日志后，经用户确认删除该交接。
 
-明确目标版本，审核官方来源，保存现有版本、路径、清单及恢复材料。用户说“最新版”时实时查询官方来源并固定这次选择，不把历史版本写进安装命令。CLI 保留当前安装方式和 npm 前缀，不擅自从 npm 迁移到原生安装；不执行可能更新其他包的无目标全局更新。
+## 完成标准
 
-### 3. 执行对应分支
+回复说明更新对象、前后版本、Verify 结果、清理结果和未验证项，并区分三件事：配置文件检查、管理员实际规则核验、真实应用验收。维护成功至少要求：签名审核通过、管理员 Verify 通过（3/3 文件、6/6 规则）、总检 0 FAIL、规定的 6 个同步文件哈希一致、维护日志已更新。任一项未满足，不能写“全部完成”。
 
-- **Desktop**：复用统一入口，官方包审核 → 新路径预保护 → 注册新版 → Verify → 收尾。相同版本只核验，不重复安装。更新失败按维护说明区分注册前后状态，不能重复迁移碰运气。
-- **CLI**：核对包名、npm registry、代理和安装位置；明确来源可信后，仅更新 `@anthropic-ai/claude-code` 到选定版本。更新前后分别读取包元数据和实际文件。核对签名、路径及所有登记目标，不能把“npm 返回成功”当作防护完成。
-- **插件**：经 VS Code 官方管理入口只更新 `anthropic.claude-code`，核对版本、安装目录和自动更新状态。插件可能包含独立程序，不能因为 CLI 防护通过就声称插件程序已覆盖；新增路径的防护需要先审阅范围，不能随意扩大系统规则。
-- **已手动更新**：跳过安装，直接审核已变化文件；用户确认来源也不能代替签名和路径检查。
-
-### 4. 恢复防护并核验
-
-路径及 Desktop 版本都未变时，使用管理员 `Refresh -ApprovedSHA256 <本次审核的全部指纹，按清单顺序> -SkipNetworkProbe`。禁止盲目从磁盘取指纹后直接批准；须先确认来源、有效签名和目标范围。
-
-路径或 Desktop 版本变了必须迁移，不能仅改哈希。现有脚本不支持的 CLI/插件新路径迁移应先给出具体方案，不能假称已有自动化。
-
-保留六条既有规则的保护，不为通过检查关闭防护。执行管理员 Verify、普通启动器 `-CheckOnly`、不打开浏览器的总检。总检可以进行常规 HTTP 连通性检测；默认不启动 Desktop、Code、浏览器或独立阻断探针。报告跳过的测试，网页及整机断线验收单独保留。
-
-任一步失败：停止后续依赖步骤，保留日志与防护，报告已做、未做和下一步。配置备份不能回退已更新的软件；没有旧安装包和验证时不承诺降级。
-
-### 5. 同步与记录：完成更新的一部分
-
-用户无需另提“更新文档”。但 Skill 是执行约定，不是后台监视器；项目外手动更新后仍需告诉维护入口一次。
-
-文档与最终回复遵循用户级 AGENTS.md 的输出规范：通俗中文、结论和操作在前、必要解释在后；短说明不堆章节，成对信息用表格。首次出现的术语简要解释，不用多份总结重复同一事实。精简先检查脚本、快捷方式和文档引用；日期旧不等于无用。批量删除按用户级删除规则处理，不能把删目录当作文档整理。
-
-- 机器证据以本次生成的目标清单、状态及 Verify/Refresh 报告为准，不手写 passed 代替脚本核验。
-- 只把本次改变的运行文件同步到既有 `claude-safe-network/scripts/desktop/维护文件` 副本，并逐文件比较 SHA-256。旧 Install/Test 记录保持历史含义。
-- 总览只保留最近版本、维护结论和一条证据链接；过程细节只在一处写。优先引用脚本日志，故障或流程变化才在 `docs/配置/Claude环境/维护日志.md` 末尾追加一节，不新建记录文件。
-- 使用说明只在操作变化时改；维护说明只在 SOP 或边界变化时改。不要每次把完整版本、哈希、日志复制进所有 README、交接文档和 Skill。
-- 历史日期文档不追写为当前状态，不批量删除旧资料。来源、证据、未测边界要保留。
-- 如果同一轮出现 Desktop 和 CLI 更新，完成全部核验后集中同步一次，避免相互覆盖状态。
-
-## 完成标准与表达
-
-回复用通俗中文，说明更新对象、前后版本、文件与规则核验、同步结果和未测项目。清楚区分“配置文件检查”“管理员实际规则核验”“真实应用验收”。
-
-维护成功至少要求：目标版本和路径明确、签名审核通过、防护基线匹配、管理员 Verify 通过、相关启动前检查通过、活动源与必要副本一致、总览能找到本次证据。任何未满足项都不能写“全部完成”。
-
-不修改无关代理、DNS、手选节点、认证信息或自动更新策略；不注册后台任务。需要改变这些内容时明确列出原因和范围，沿用用户已有授权判断是否执行。
+不改无关代理、DNS、手选节点、认证信息或自动更新策略，不注册后台任务。

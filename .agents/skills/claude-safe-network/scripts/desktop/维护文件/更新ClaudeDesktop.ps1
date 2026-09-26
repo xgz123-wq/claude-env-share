@@ -52,8 +52,9 @@ function Run-Manager([string]$Mode) {
 }
 function Assert-NoDuplicatePreGuard([string]$NewPath, [string]$RecoveryJournal) {
     $approved = if ($RecoveryJournal) { Get-Content -LiteralPath $RecoveryJournal -Raw | ConvertFrom-Json } else { $null }
-    $root=Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard'
-    foreach ($directory in Get-ChildItem -LiteralPath $root -Directory -Filter '受控更新-*') {
+    # Codex 等 MSIX 打包应用写 %LOCALAPPDATA% 会被重定向到 Packages\<包>\LocalCache\Local；两处历史都要查。
+    $roots=@(Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard') + @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Packages\*\LocalCache\Local\ClaudeNetworkGuard') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    foreach ($directory in @($roots | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Get-ChildItem -LiteralPath $_ -Directory -Filter '受控更新-*' })) {
         $path=Join-Path $directory.FullName '更新过程.json'
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $prior=Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
@@ -93,7 +94,7 @@ try {
     $packages = @(Get-AppxPackage -Name Claude)
     if ($packages.Count -ne 1) { throw '当前用户 Claude 包不唯一或不存在。' }
     $current = $packages[0]
-    if ($identity.GetAttribute('Name') -cne $current.Name -or $identity.GetAttribute('Publisher') -cne $current.Publisher -or $identity.GetAttribute('ProcessorArchitecture') -ne 'x64') { throw '包名称、发布者或架构与预期不符。' }
+    if ($identity.GetAttribute('Name') -cne $current.Name -or $identity.GetAttribute('Publisher') -cne $current.Publisher -or $identity.GetAttribute('ProcessorArchitecture') -ne [string]$current.Architecture) { throw '包名称、发布者或架构与已装版本不符。' }
     $newVersion = [version]$identity.GetAttribute('Version')
     if ($newVersion -lt [version]$current.Version) { throw '拒绝降级。' }
     $inspection = [ordered]@{Path=$PackagePath;SHA256=$packageHash;Signature=$packageSignature;OldVersion=[string]$current.Version;NewVersion=[string]$newVersion;PackageFamily=$current.PackageFamilyName;Identity=$identity.OuterXml;Applications=($applications | ForEach-Object {$_.OuterXml});Dependencies=$xml.SelectSingleNode('/*[local-name()="Package"]/*[local-name()="Dependencies"]').OuterXml;Extensions=@($xml.SelectNodes('//*[local-name()="Extension"]') | ForEach-Object {$_.OuterXml});Capabilities=$xml.SelectSingleNode('/*[local-name()="Package"]/*[local-name()="Capabilities"]').OuterXml}
@@ -137,7 +138,7 @@ try {
     Add-AppxPackage -Path $PackagePath -Stage -Volume $stageVolume[0] -ErrorAction Stop
     $registered = @(Get-AppxPackage -Name Claude)
     if ($registered.Count -ne 1 -or $registered[0].PackageFullName -ne $current.PackageFullName) { throw 'Stage 后当前用户注册状态意外改变；保留现场，停止。' }
-    $staged = @(Get-AppxPackage -AllUsers -Name Claude | Where-Object {[string]$_.Version -eq [string]$newVersion -and $_.PackageFamilyName -eq $current.PackageFamilyName -and [string]$_.Architecture -eq 'X64'})
+    $staged = @(Get-AppxPackage -AllUsers -Name Claude | Where-Object {[string]$_.Version -eq [string]$newVersion -and $_.PackageFamilyName -eq $current.PackageFamilyName -and [string]$_.Architecture -eq [string]$current.Architecture})
     if ($staged.Count -ne 1 -or -not $staged[0].InstallLocation) { throw '找不到唯一实际 Stage 路径。' }
     $newRoot = [IO.Path]::GetFullPath($staged[0].InstallLocation)
     $newExe = Join-Path $newRoot 'app\claude.exe'
