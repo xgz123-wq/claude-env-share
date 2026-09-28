@@ -42,6 +42,15 @@ function main(config, profileName) {
     "IP-CIDR6,2607:6bc0::/32," + groupName + ",no-resolve",
     "IP-ASN,399358," + groupName + ",no-resolve"
   ]);
+  // 浏览器/应用自带加密 DNS 的端点（DoH 走 443，不被 53 劫持）强制直连：
+  // 落兜底规则会进美国线路，导致国内域名被解析成海外 IP（2026-09-28 Edge 实例）。
+  var dohRuleMatchers = [
+    "DOMAIN-SUFFIX,cloudflare-dns.com",
+    "DOMAIN-SUFFIX,dns.google"
+  ];
+  var dohRules = dohRuleMatchers.map(function (matcher) {
+    return matcher + ",DIRECT";
+  });
   var legacyMatchers = claudeRuleMatchers.concat([
     "DOMAIN,claude.com",
     "DOMAIN,clau.de",
@@ -79,6 +88,15 @@ function main(config, profileName) {
     }
     return legacyMatchers.some(function (matcher) {
       return rule.indexOf(matcher + ",") === 0;
+    });
+  }
+
+  function isManagedDohRule(rule) {
+    if (typeof rule !== "string") {
+      return false;
+    }
+    return dohRuleMatchers.some(function (matcher) {
+      return rule.indexOf(matcher + ",DIRECT") === 0;
     });
   }
 
@@ -152,9 +170,9 @@ function main(config, profileName) {
     config.rules = [];
   }
   config.rules = config.rules.filter(function (rule) {
-    return !isManagedClaudeRule(rule);
+    return !isManagedClaudeRule(rule) && !isManagedDohRule(rule);
   });
-  config.rules = [inboundRule].concat(claudeRules, config.rules);
+  config.rules = [inboundRule].concat(claudeRules, dohRules, config.rules);
 
   // 使用 Mihomo 官方生态 MetaCubeX 数据，每日更新；失败时继续保留本地旧文件。
   config["geo-auto-update"] = true;
