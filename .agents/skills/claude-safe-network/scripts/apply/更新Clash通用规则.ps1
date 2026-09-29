@@ -1,6 +1,6 @@
 #requires -Version 7.0
 $ErrorActionPreference = 'Stop'
-
+if ($env:CLAUDE_ALLOW_CLASH_RESTART -ne '1') { throw '本脚本会停止并重启 Clash 界面与内核，会让 Clash 掉线；日常更新只走热重载。确需运行时先设置 CLAUDE_ALLOW_CLASH_RESTART=1。' }
 $base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $backupRoot = Join-Path $base 'account-routing-backups'
 $sourceScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'clash\Clash全局账号通道.js'

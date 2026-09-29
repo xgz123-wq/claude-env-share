@@ -38,7 +38,7 @@
 |---|---|
 | 理解整体架构、出问题定位到哪一层 | [架构讲解](说明/架构讲解.html) |
 | 每天启动与检查 | [日常使用](说明/日常使用.md) |
-| 每周或更新后复核 Claude 域名 | [DNS 分层与域名维护](说明/DNS分层说明.md#claude-域名定期复核) |
+| 每周或更新后复核 Claude 域名 | 运行 `Clash/检查Claude官方域名.ps1`；分工与新域名处理见 [DNS 分层与域名维护](说明/DNS分层说明.md#claude-域名定期复核) |
 | 更新 Desktop / CLI / 插件，或手动更新后补同步 | 在本项目说「更新 Claude Desktop」等，按 [claude-maintenance](../../../.agents/skills/claude-maintenance/SKILL.md) 执行 |
 | Desktop 更新细则 | [更新维护说明](Desktop防护/更新维护说明.md) |
 | 网络排障、换订阅、改端口 | Skill [claude-safe-network](../../../.agents/skills/claude-safe-network/SKILL.md) |

@@ -68,6 +68,6 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 回复说明更新对象、前后版本、Verify 结果、清理结果和未验证项，并区分三件事：配置文件检查、管理员实际规则核验、真实应用验收。维护成功至少要求：签名审核通过、管理员 Verify 通过（3/3 文件、6/6 规则）、总检 0 FAIL、规定的 6 个同步文件哈希一致、维护日志已更新。任一项未满足，不能写“全部完成”。
 
-每次 Desktop、CLI 或插件更新后，按 `docs/配置/Claude环境/说明/DNS分层说明.md` 的「Claude 域名定期复核」比对官方网络要求与实际路由；域名变化不直接从示例或旧清单照抄到 Clash。
+每次 Desktop、CLI 或插件更新后，按 `docs/配置/Claude环境/说明/DNS分层说明.md` 的「Claude 域名定期复核」比对官方网络要求与实际路由：先运行 `docs/配置/Claude环境/Clash/检查Claude官方域名.ps1`，退出码 `0` 无需处理；域名变化不直接从示例或旧清单照抄到 Clash。
 
 不改无关代理、DNS、手选节点、认证信息或自动更新策略，不注册后台任务。

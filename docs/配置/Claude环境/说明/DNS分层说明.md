@@ -41,7 +41,20 @@
 | 专用 Chrome `43866` | 进入专用 SOCKS 的连接由置顶 `IN-NAME` 规则分流 | 实际浏览器连接是否进入 `43866`，以及网页出口、DNS、WebRTC |
 | Desktop `43867` | 进入专用 HTTP listener 的连接指定 `ACCOUNT-US` | Desktop 与子进程的真实连接是否进入 `43867` |
 
-**操作**：记录官方清单的变化日期和域名用途；正常使用相关功能时查看脱敏的 Mihomo 目标域名、入站、规则、组和出口；只给确认属于 Claude 且需要同一出口的域名添加最窄规则，并同步 `Script.js`、Claude 专用 DNS policy、通道验证脚本和 Skill 副本。`npm`、GitHub、Google Storage 等共享域名不全局绑定 `ACCOUNT-US`。备份后应用，读回运行配置并跑一键总检；三个入口出口一致后，仍分别做真实浏览器网页验收。未观察到的访问只记为规则覆盖，不记为实测通过。
+**分工**：官方清单比对由脚本 `Clash/检查Claude官方域名.ps1` 完成，只有脚本报出未归类新域名时才需要模型判断。
+
+| 步骤 | 谁做 | 说明 |
+|---|---|---|
+| 抓官方两份文档、提取域名、按后缀归类、核对路由脚本与验证脚本的清单一致 | 脚本（只读，只 GET 官方 Markdown） | 退出码 `0` 全部已归类，保持安静；`1` 有未归类新域名；`2` 抓取或解析失败、本地清单不一致 |
+| 判断新域名是 Claude 专属还是共享第三方 | 模型 | 看官方用途说明；共享的写入脚本内 `$sharedHosts` 并写明原因，专属的走变更流程加规则 |
+| 备份、改路由与验证脚本、读回运行配置、总检 | 模型按流程执行 | 只走热重载，不停止或重启 Clash，改前先确认 Claude 没有在使用 |
+| 真实浏览器网页验收、Desktop 内置浏览器验收 | 用户 | 未观察到的访问只记为规则覆盖，不记为实测通过 |
+
+**归类规则**：被 `Clash全局账号通道.js` 里 Claude 域名后缀覆盖的记为已覆盖，如 `platform.claude.com`、`downloads.claude.ai`、`bridge.claudeusercontent.com`；在 `$sharedHosts` 里的记为共享，如 npm、GitHub、Google Storage、Datadog、字体与脚本 CDN；其余都是未归类。共享域名不全局绑定 `ACCOUNT-US`。
+
+**运行**：`pwsh -NoProfile -File docs\配置\Claude环境\Clash\检查Claude官方域名.ps1`，输出 JSON；`-OfflineDir <目录>` 可用已下载的 `network-config.md`、`desktop.md` 离线测试。Skill 副本 `scripts/clash/检查Claude官方域名.ps1` 与它逐字节相同。
+
+**新增域名后**：有真实连接证据时，再查看脱敏的 Mihomo 目标域名、入站、规则、组和出口；新规则同步 `Script.js`、Claude 专用 DNS policy、通道验证脚本和 Skill 副本。
 
 **规则来源**：Anthropic Desktop 网络要求列出 `claude.app` 及动态子域，因此本分享版的规则模板包含 `DOMAIN-SUFFIX,claude.app` 与 `+.claude.app`；部署后的实际访问和出口要在使用者机器上验证。CLI 官方清单未把它列为独立的 CLI 必需域名。
 
