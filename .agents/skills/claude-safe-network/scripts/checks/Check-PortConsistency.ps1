@@ -156,7 +156,7 @@ if (Test-Path $liveScript) {
         $h1 = (Get-FileHash $liveScript -Algorithm SHA256).Hash
         $h2 = (Get-FileHash $authoritative -Algorithm SHA256).Hash
         Add-CheckResult -Status $(if ($h1 -eq $h2) { 'PASS' } else { 'WARN' }) -Item 'Script.js 与 skill 权威副本' `
-            -Evidence $(if ($h1 -eq $h2) { "哈希一致 $($h1.Substring(0,12))…" } else { "不一致：已安装 $($h1.Substring(0,12))… vs 副本 $($h2.Substring(0,12))…；用 scripts\apply\更新Clash通用规则.ps1 同步" })
+            -Evidence $(if ($h1 -eq $h2) { "哈希一致 $($h1.Substring(0,12))…" } else { "不一致：已安装 $($h1.Substring(0,12))… vs 副本 $($h2.Substring(0,12))…；请由用户手动同步（更新Clash通用规则.ps1 会重启 Clash，默认拒绝运行）" })
     }
     else {
         Add-CheckResult -Status 'FAIL' -Item 'Script.js 权威副本' -Evidence "skill 内缺少：$authoritative"
