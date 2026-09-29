@@ -1,6 +1,7 @@
 # 变更与回滚 SOP
 
 > 总原则：**能只改开关就不改文件；能只改全局脚本就不碰订阅。** 每次变更后必跑一键总检。
+> Claude 域名的每周与更新后复核方法只维护在 `docs/配置/Claude环境/说明/DNS分层说明.md` 的「Claude 域名定期复核」；新增域名须核对官方清单与实际连接后再改规则。
 >
 > | SOP | 什么时候用 | 要动系统吗 |
 > |---|---|---|
@@ -30,7 +31,7 @@
 
 ### 换订阅后**自动生效**的部分（不用管）
 
-`ACCOUNT-US` 组重建 · Claude 19 域名 + IP-ASN 置顶规则 · `43866` / `43867` listener ·
+`ACCOUNT-US` 组重建 · Claude 专用域名 + IP-ASN 置顶规则 · `43866` / `43867` listener ·
 TUN `strict-route` + `dns-hijack` · Claude 专属 DNS policy · `geox-url.asn` 兜底。
 
 ### 换订阅后**需要人工**的部分

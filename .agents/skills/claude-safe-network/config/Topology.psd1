@@ -34,6 +34,7 @@
         '+.anthropic.com'
         '+.claude.ai'
         '+.claude.com'
+        '+.claude.app'
         '+.clau.de'
         '+.claudemcpclient.com'
         '+.claudemcpcontent.com'
