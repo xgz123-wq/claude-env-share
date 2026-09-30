@@ -54,8 +54,8 @@ Desktop 是 MSIX 包，升级会换目录名 `WindowsApps\Claude_<版本>_x64__p
 
 ### 必做 3 件事
 
-1. **重签 WFP 6 条阻断**（需管理员）：
-   - 更新 `维护文件\应用过滤目标.json` 里的 3 个 exe 路径与 SHA256（`PackageVersion` 也要改）
+1. **重签 WFP 8 条阻断**（需管理员）：
+   - 更新 `维护文件\应用过滤目标.json` 里的 4 个 exe 路径与 SHA256（`PackageVersion` 也要改）
    - 用**管理员**运行 `应用直连防护管理.ps1` 的 Install
    - 再用**管理员**运行 Verify，确认凭证是 `passed`（不要只看 `Install` 记录就收工）
 2. **复验注册表同层**：`HKLM\SOFTWARE\Policies\Claude` 里 `disableAutoUpdates=1` **与**
@@ -211,14 +211,14 @@ pwsh -File scripts\checks\Request-ElevatedVerify.ps1 -Status
 
 | 结果 | 含义 |
 |---|---|
-| `[PASS]` 第 5 层 `Windows WFP 实盘核对` | 6 条过滤器实盘在位，缓存新鲜（默认 30 天） |
+| `[PASS]` 第 5 层 `Windows WFP 实盘核对` | 8 条过滤器实盘在位，缓存与当前清单绑定且新鲜（默认 30 天） |
 | `[WARN] ... 30 天内未提权复核` | 缓存过期或还没建。跑 `-Refresh` 即可 |
 | `[FAIL] ...` | 实盘确实缺规则 → 走 SOP-2 用 `应用直连防护管理.ps1` 重签 |
 | `-Refresh` 退出码 `2` | 你在 UAC 弹窗点了「否」。**什么都没改**，随时可重跑 |
 
-**它做了什么（可审计）**：读 `维护文件\应用过滤目标.json` 的 3 个目标 → 逐个 `Verify()`
+**它做了什么（可审计）**：读 `维护文件\应用过滤目标.json` 的 4 个目标 → 逐个 `Verify()`
 （只读，零副作用）→ 记录 `PackageVersionMatches` 供第 4 层判断"Desktop 升级后是否已重签" →
-写 `config\elevated-verify-cache.json`。**不写任何系统配置**。
+写入绑定清单 SHA256、Desktop 版本和全部 GUID 的 `config\elevated-verify-cache.json`。**不写任何系统配置**。
 
 **红线**：提权只用于「读 WFP 实盘 + 写这个缓存」。任何改系统配置的动作都不走提权路径。
 

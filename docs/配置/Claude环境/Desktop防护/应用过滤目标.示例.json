@@ -24,6 +24,13 @@
       "SHA256": "<审核后填写>",
       "V4": "<新 GUID>",
       "V6": "<新 GUID>"
+    },
+    {
+      "Name": "Claude Code VS Code 插件",
+      "Path": "C:\\Users\\<用户名>\\.vscode\\extensions\\anthropic.claude-code-<版本>-win32-x64\\resources\\native-binary\\claude.exe",
+      "SHA256": "<审核后填写>",
+      "V4": "<新 GUID>",
+      "V6": "<新 GUID>"
     }
   ]
 }

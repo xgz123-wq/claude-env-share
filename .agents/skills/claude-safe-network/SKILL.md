@@ -33,7 +33,7 @@ Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)          
                                   ├─ 置顶规则：Claude/Anthropic 域名 + IP-ASN 399358
                                   ├─ DNS：Claude 专属域名走 DoH over ACCOUNT-US
                                   ├─ TUN：strict-route + dns-hijack(any:53)
-                                  └─ WFP：6 条精确阻断（3 个 claude.exe × V4/V6）
+                                  └─ WFP：8 条精确阻断（4 个 claude.exe × V4/V6）
 ```
 
 ## 目录结构

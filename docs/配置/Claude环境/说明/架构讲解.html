@@ -712,7 +712,7 @@
 <tr><th>设置</th><th>作用</th><th>管理脚本</th></tr>
 <tr><td>HKLM 策略 <code>egressProxyUrl = http://127.0.0.1:43867</code></td><td>让 Desktop 的网络请求走专用口</td><td><code>Desktop防护/专用通道管理.ps1</code></td></tr>
 <tr><td>HKLM 策略 <code>disableAutoUpdates = 1</code></td><td>关自动更新；更新改走受控流程（先给新版加防护，再切换版本）</td><td><code>Desktop防护/Claude自动更新管理.ps1</code></td></tr>
-<tr><td>WFP 直连防护：3 个程序 × IPv4/IPv6 = 6 条规则</td><td>Desktop 主程序和 Code 的两个程序文件只允许连本机回环地址；想绕过代理直连会被挡</td><td><code>Desktop防护/应用直连防护管理.ps1</code></td></tr>
+<tr><td>WFP 直连防护：4 个程序 × IPv4/IPv6 = 8 条规则</td><td>Desktop 主程序、CLI 的两个程序文件和 VS Code 插件内置程序只允许连本机回环地址；想绕过代理直连会被挡，但不阻断整个 <code>Code.exe</code></td><td><code>Desktop防护/应用直连防护管理.ps1</code></td></tr>
 </table></div>
 
 <div class="box warn rv"><span class="t">自动更新不要用 Enable 打开</span>

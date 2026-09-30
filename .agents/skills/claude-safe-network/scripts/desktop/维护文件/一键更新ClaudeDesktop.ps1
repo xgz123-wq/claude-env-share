@@ -4,7 +4,7 @@ param(
     [ValidateSet('Verify','Update')][string]$Action = 'Verify',
     [string]$PackagePath,
     [string]$ApprovedSHA256,
-    # npm 更新 CLI 后按清单顺序传入三个已审核指纹；与 Desktop 更新共用同一次 UAC，先刷新再迁移。
+    # CLI 或插件同路径更新后按清单顺序传入四个已审核指纹；与 Desktop 更新共用同一次 UAC，先刷新再迁移。
     [string[]]$CliApprovedSHA256,
     [string]$ResumeJournal,
     [switch]$Worker,
@@ -56,7 +56,7 @@ try {
     foreach ($value in @($PackagePath,$ApprovedSHA256,$ResumeJournal,$ResultDirectory,$ExpectedUserSid) + @($CliApprovedSHA256)) { $null = Quote-Literal $value }
     if ($CliApprovedSHA256) {
         if ($Action -ne 'Update') { throw 'CliApprovedSHA256 只用于 Update。' }
-        if (@($CliApprovedSHA256).Count -ne 3 -or @($CliApprovedSHA256 | Where-Object { $_ -notmatch '^[a-fA-F0-9]{64}$' }).Count) { throw 'CliApprovedSHA256 必须是按清单顺序的三个 SHA256。' }
+        if (@($CliApprovedSHA256).Count -ne 4 -or @($CliApprovedSHA256 | Where-Object { $_ -notmatch '^[a-fA-F0-9]{64}$' }).Count) { throw 'CliApprovedSHA256 必须是按清单顺序的四个 SHA256。' }
     }
     if (-not $ResultDirectory) { $ResultDirectory = Join-Path $env:LOCALAPPDATA ('ClaudeNetworkGuard\统一维护-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')) }
     $ResultDirectory = [IO.Path]::GetFullPath($ResultDirectory)
@@ -144,7 +144,7 @@ try {
     $result.Version = $verified.PackageVersion
     $result.HashCount = @($verified.Targets | Where-Object BinaryUnchanged).Count
     $result.FiltersCount = @($verified.Targets | ForEach-Object Filters).Count
-    if ($result.HashCount -ne 3 -or $result.FiltersCount -ne 6) { throw '预期的三个程序文件或六条防护规则不完整。' }
+    if ($result.HashCount -ne 4 -or $result.FiltersCount -ne 8) { throw '预期的四个程序文件或八条防护规则不完整。' }
     $destination = Join-Path $root.FullName '.agents\skills\claude-safe-network\scripts\desktop\维护文件'
     if (-not (Test-Path -LiteralPath $destination)) { throw '技能维护副本目录缺失。' }
     $result.SynchronizedFiles = @()

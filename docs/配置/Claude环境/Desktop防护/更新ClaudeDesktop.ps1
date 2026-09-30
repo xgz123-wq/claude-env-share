@@ -107,11 +107,11 @@ try {
     if ($manifest.PackageFamily -ne $current.PackageFamilyName -or $manifest.PackageVersion -ne [string]$current.Version -or $state.Status -notlike 'installed_*' -or $state.ManifestSHA256 -ne (Get-FileHash -LiteralPath $manifestPath).Hash -or $state.HelperSHA256 -ne (Get-FileHash -LiteralPath $helper).Hash) { throw '现有版本、清单或防护状态不一致。' }
     $oldExe = Join-Path $current.InstallLocation 'app\claude.exe'
     $desktopTargets = @($manifest.Targets | Where-Object {$_.Path -ieq $oldExe})
-    if ($desktopTargets.Count -ne 1 -or $manifest.Targets.Count -ne 3) { throw '预期一个 Desktop 目标与两个 Code 目标；清单变化需要人工审核。' }
+    if ($desktopTargets.Count -ne 1 -or $manifest.Targets.Count -ne 4) { throw '预期一个 Desktop 目标、两个 CLI 目标与一个 VS Code 插件目标；清单变化需要人工审核。' }
     $oldDesktop = $desktopTargets[0] | ConvertTo-Json -Depth 10 | ConvertFrom-Json
     $oldCode = @($manifest.Targets | Where-Object {$_.Path -ine $oldExe}) | ConvertTo-Json -Depth 10 -Compress
     $allKeys = @($manifest.Targets | ForEach-Object {[guid]$_.V4;[guid]$_.V6})
-    if (@($allKeys | Select-Object -Unique).Count -ne 6 -or $allKeys -contains [guid]::Empty) { throw '原有过滤 GUID 不唯一或无效。' }
+    if (@($allKeys | Select-Object -Unique).Count -ne 8 -or $allKeys -contains [guid]::Empty) { throw '原有过滤 GUID 不唯一或无效。' }
     Add-Type -LiteralPath $helper
     $oldVerified = Verify-Targets $manifest.Targets
     $backup = Join-Path $env:LOCALAPPDATA ('ClaudeNetworkGuard\受控更新-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
@@ -199,7 +199,7 @@ try {
     if ($removed -ne 2 -or $null -ne [ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Get([guid]$oldDesktop.V4) -or $null -ne [ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Get([guid]$oldDesktop.V6)) { throw '旧 Desktop 规则清理结果不符。' }
     Run-Manager 'Verify'
     Assert-Environment
-    Step '旧 Desktop 两条已移除，当前六条防护复核通过' $removed
+    Step '旧 Desktop 两条已移除，当前八条防护复核通过' $removed
     $journal.Status='passed_pending_desktop_e2e'
     Save-Journal
     Write-Output ('更新完成：' + $current.Version + ' → ' + $newVersion + '；记录：' + $journalPath + '。未启动 Claude；真实应用验收另行记录。')
@@ -211,5 +211,4 @@ try {
     Write-Error -Message ($_.Exception.Message + $(if($journalPath){'；现场记录：'+$journalPath}else{''})) -ErrorAction Continue
     exit 1
 }
-
 

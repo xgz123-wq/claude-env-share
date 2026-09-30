@@ -87,6 +87,27 @@ function Assert-GuardEvidence {
     $install = Get-Content -LiteralPath $guardInstallPath -Raw | ConvertFrom-Json
     $manifestHash = (Get-FileHash -LiteralPath $guardManifestPath -Algorithm SHA256).Hash
 
+    $pluginTargets = @($manifest.Targets | Where-Object Name -eq 'Claude Code VS Code 插件')
+    $pluginRegistry = Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
+    if ($pluginTargets.Count -ne 1 -or -not (Test-Path -LiteralPath $pluginRegistry)) {
+        throw 'VS Code Claude Code 插件的直连防护清单或当前登记不完整。'
+    }
+    $pluginRecords = @((Get-Content -LiteralPath $pluginRegistry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
+    if ($pluginRecords.Count -ne 1 -or $pluginRecords[0].metadata.pinned -ne $true) {
+        throw 'VS Code Claude Code 插件未唯一登记或未固定版本。'
+    }
+    $pluginRoot = [string]$pluginRecords[0].location.path
+    if ($pluginRoot -match '^/([A-Za-z]:/.*)$') { $pluginRoot = $Matches[1] }
+    $currentPluginPath = Join-Path ($pluginRoot.Replace('/','\')) 'resources\native-binary\claude.exe'
+    if ($pluginTargets[0].Path -ine $currentPluginPath) {
+        throw 'VS Code Claude Code 插件已更新换路径，直连防护必须迁移后才能继续。'
+    }
+    $vsCodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
+    if (Test-Path -LiteralPath $vsCodeSettings) {
+        $wrapperMatch = [regex]::Match((Get-Content -LiteralPath $vsCodeSettings -Raw), '"claudeCode\.claudeProcessWrapper"\s*:\s*"([^"]*)"')
+        if ($wrapperMatch.Success -and $wrapperMatch.Groups[1].Value.Trim()) { throw 'VS Code 配置了未纳入防护的 claudeProcessWrapper。' }
+    }
+
     if ([string]$manifest.PackageVersion -ne $PackageVersion) {
         throw 'Claude Desktop 已更新，Windows 直连防护尚未迁移到当前版本。'
     }

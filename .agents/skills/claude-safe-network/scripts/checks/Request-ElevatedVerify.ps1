@@ -81,6 +81,8 @@ if ($Worker) {
         }
         $abi = [ClaudeDesktopNetworkGuard.DirectConnectionFilter]::ValidateAbi()
         $man = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+        $wfpKeys = @($man.Targets | ForEach-Object { [string]$_.V4; [string]$_.V6 })
 
         foreach ($t in $man.Targets) {
             $expected += 2
@@ -121,7 +123,7 @@ if ($Worker) {
     $deskAt = ''
     $pkgVer = ''
     if (Test-Path -LiteralPath $managerPath) {
-        $r = Invoke-ChildPwsh -ScriptPath $managerPath -Arguments @('-Action', 'Verify', '-Json') -TimeoutSec 120
+        $r = Invoke-ChildPwsh -ScriptPath $managerPath -Arguments @('-Action', 'Verify') -TimeoutSec 120
         if ($r -and $r.ExitCode -eq 0) {
             $vj = $root + '\scripts\desktop\维护文件\应用直连防护-Verify.json'
             if (Test-Path -LiteralPath $vj) {
@@ -142,6 +144,8 @@ if ($Worker) {
         WfpExpected         = $expected
         WfpFound            = $found
         WfpPassed           = (($expected -gt 0) -and ($found -eq $expected))
+        ManifestSHA256      = $manifestHash
+        WfpKeys             = $wfpKeys
         WfpDetail           = $rows
         WfpAbi              = $abi
         WfpError            = $err
@@ -177,7 +181,7 @@ if ($Status) {
     }
     $limit = [int]$c.MaxAgeDays
     if ($limit -le 0) { $limit = $MaxAgeDays }
-    $fresh = ($age -ne $null -and $age -le $limit)
+    $fresh = ($age -ne $null -and $age -le $limit -and (Test-ElevatedVerifyCacheBinding -Cache $c))
     $wfpText = '未通过'
     if ($c.WfpPassed) { $wfpText = '通过' }
     if ($Json) {
@@ -263,7 +267,7 @@ Write-Host ''
 if ($c) {
     $limit = [int]$c.MaxAgeDays
     if ($limit -le 0) { $limit = $MaxAgeDays }
-    $fresh = ($age -ne $null -and $age -le $limit)
+    $fresh = ($age -ne $null -and $age -le $limit -and (Test-ElevatedVerifyCacheBinding -Cache $c))
     $freshCn = '已过期'
     if ($fresh) { $freshCn = '新鲜' }
     Write-Host ('当前缓存：' + $c.At + '  （' + $age + ' 天前，有效期 ' + $limit + ' 天，' + $freshCn + '）')

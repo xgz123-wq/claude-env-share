@@ -11,7 +11,7 @@
       3. HKCU 策略不应存在（存在会与 HKLM 打架）
       4. configLibrary\_meta.json 里 appliedId 对应的配置内容是否真含该代理
     另做「升级漂移预警」：MSIX 当前版本 / 目标哈希 与 应用过滤目标.json 记录比对，
-    一旦不一致就说明 Desktop 升级过、WFP 6 条精确阻断已失效，必须重签。
+    一旦不一致就说明 Desktop 升级过、WFP 精确阻断已失效，必须重签。
 #>
 [CmdletBinding()]
 param([switch] $Json)
@@ -59,7 +59,7 @@ foreach ($key in $Topology.DesktopPolicyKeys) {
     }
 }
 if ($policyLayers.Count -eq 0) {
-    Add-CheckResult -Status 'FAIL' -Item '策略注册表' -Evidence "HKLM\SOFTWARE\Policies\Claude 不存在 —— Desktop 会直连，被 WFP 6 条规则拒绝"
+    Add-CheckResult -Status 'FAIL' -Item '策略注册表' -Evidence "HKLM\SOFTWARE\Policies\Claude 不存在 —— Desktop 会直连，被 WFP 精确规则拒绝"
 }
 
 $hkcu = 'HKCU:\SOFTWARE\Policies\Claude'
@@ -119,7 +119,7 @@ if (Test-Path $manifestPath) {
     $detail['manifestPreparedAt'] = $man.PreparedAt
 
     if ($currentVersion -and $currentVersion -ne [string]$man.PackageVersion) {
-        Add-CheckResult -Status 'FAIL' -Item '版本漂移' -Evidence "当前 $currentVersion ≠ 清单 $($man.PackageVersion)；WFP 6 条精确阻断已失效，Desktop 会被判直连"
+        Add-CheckResult -Status 'FAIL' -Item '版本漂移' -Evidence "当前 $currentVersion ≠ 清单 $($man.PackageVersion)；WFP 精确阻断已失效，Desktop 会被判直连"
     }
     else {
         Add-CheckResult -Status 'PASS' -Item '版本漂移' -Evidence "$($man.PackageVersion)（清单 $($man.PreparedAt)）"

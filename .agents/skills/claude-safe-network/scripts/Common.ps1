@@ -395,6 +395,26 @@ function Get-ElevatedCacheAge {
 
 # 返回 @{ IsAdmin; Cache; Age; Fresh; Refreshed; Skipped; Error }
 # 只要 Fresh=$true，调用方就能拿 Cache 里的 WfpFound / WfpDetail / DesktopVerifyStatus 下结论。
+function Test-ElevatedVerifyCacheBinding {
+    param($Cache)
+    if (-not $Cache) { return $false }
+    $manifestPath = (Get-SkillRoot) + '\scripts\desktop\维护文件\应用过滤目标.json'
+    if (-not (Test-Path -LiteralPath $manifestPath)) { return $false }
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
+        $expectedKeys = @($manifest.Targets | ForEach-Object { [string]$_.V4; [string]$_.V6 } | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object)
+        $cachedKeys = @($Cache.WfpKeys | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object)
+        return (
+            [string]$Cache.ManifestSHA256 -eq $manifestHash -and
+            [string]$Cache.PkgVersion -eq [string]$manifest.PackageVersion -and
+            [int]$Cache.WfpExpected -eq $expectedKeys.Count -and
+            ($cachedKeys -join '|') -ceq ($expectedKeys -join '|')
+        )
+    }
+    catch { return $false }
+}
+
 function Update-ElevatedVerifyCache {
     param([int]$MaxAgeDays = 30, [switch]$NoElevate, [int]$TimeoutSec = 300)
     $o = [ordered]@{
@@ -403,7 +423,7 @@ function Update-ElevatedVerifyCache {
     }
     $o.Cache = Read-ElevatedVerifyCache
     $o.Age = Get-ElevatedCacheAge -Cache $o.Cache
-    if ($o.Cache -and $o.Age -ne $null -and $o.Age -le $MaxAgeDays) {
+    if ($o.Cache -and $o.Age -ne $null -and $o.Age -le $MaxAgeDays -and (Test-ElevatedVerifyCacheBinding -Cache $o.Cache)) {
         $o.Fresh = $true
         return [pscustomobject]$o
     }
@@ -421,7 +441,7 @@ function Update-ElevatedVerifyCache {
     $o.Refreshed = $true
     $o.Cache = Read-ElevatedVerifyCache
     $o.Age = Get-ElevatedCacheAge -Cache $o.Cache
-    if ($o.Cache -and $o.Age -ne $null -and $o.Age -le $MaxAgeDays) { $o.Fresh = $true }
+    if ($o.Cache -and $o.Age -ne $null -and $o.Age -le $MaxAgeDays -and (Test-ElevatedVerifyCacheBinding -Cache $o.Cache)) { $o.Fresh = $true }
     elseif ($r.ExitCode -eq 2) { $o.Error = '提权被取消' }
     elseif ($r.ExitCode -eq 3) { $o.Error = '找不到 PowerShell 7 的 pwsh.exe' }
     elseif ($o.Cache) { $o.Error = "提权核对跑完但缓存时间戳仍是旧的（exit $($r.ExitCode)）" }

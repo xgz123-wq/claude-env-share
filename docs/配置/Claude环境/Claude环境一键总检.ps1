@@ -222,6 +222,40 @@ if (Test-Path -LiteralPath $guardManifest) {
     $manifestHash = (Get-FileHash -LiteralPath $guardManifest -Algorithm SHA256).Hash
     $package = Get-AppxPackage -Name Claude -ErrorAction SilentlyContinue
     $targets = @($manifest.Targets)
+    $pluginTargets = @($targets | Where-Object Name -eq 'Claude Code VS Code 插件')
+    $pluginRegistry = Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
+    $currentPluginPath = $null
+    $pluginPathProblem = ''
+    if (-not (Test-Path -LiteralPath $pluginRegistry)) {
+      $pluginPathProblem = '缺少 VS Code extensions.json，无法确认当前插件路径'
+    } else {
+      $pluginRecords = @((Get-Content -LiteralPath $pluginRegistry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
+      if ($pluginRecords.Count -ne 1) {
+        $pluginPathProblem = "VS Code 当前登记的 Claude Code 插件数量为 $($pluginRecords.Count)，预期 1"
+      } elseif ($pluginRecords[0].metadata.pinned -ne $true) {
+        $pluginPathProblem = 'VS Code Claude Code 插件未固定版本，自动更新可能更换未受保护的路径'
+      } elseif ([string]$pluginRecords[0].metadata.targetPlatform -ne 'win32-x64') {
+        $pluginPathProblem = "VS Code Claude Code 插件平台为 $($pluginRecords[0].metadata.targetPlatform)，预期 win32-x64"
+      } else {
+        $pluginRoot = [string]$pluginRecords[0].location.path
+        if ($pluginRoot -match '^/([A-Za-z]:/.*)$') { $pluginRoot = $Matches[1] }
+        $pluginRoot = $pluginRoot.Replace('/','\')
+        $currentPluginPath = Join-Path $pluginRoot 'resources\native-binary\claude.exe'
+      }
+    }
+    if ($pluginTargets.Count -ne 1) {
+      $pluginPathProblem = "防护清单里的 VS Code 插件目标数量为 $($pluginTargets.Count)，预期 1"
+    } elseif ($currentPluginPath -and $pluginTargets[0].Path -ine $currentPluginPath) {
+      $pluginPathProblem = "VS Code 插件路径已变化：当前=$currentPluginPath；防护=$($pluginTargets[0].Path)"
+    }
+    $vsCodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
+    if (-not $pluginPathProblem -and (Test-Path -LiteralPath $vsCodeSettings)) {
+      $settingsText = Get-Content -LiteralPath $vsCodeSettings -Raw
+      $wrapperMatch = [regex]::Match($settingsText, '"claudeCode\.claudeProcessWrapper"\s*:\s*"([^"]*)"')
+      if ($wrapperMatch.Success -and $wrapperMatch.Groups[1].Value.Trim()) {
+        $pluginPathProblem = 'VS Code 配置了 claudeProcessWrapper，实际启动程序不再是受保护的插件 claude.exe'
+      }
+    }
     $validTargets = @($targets | Where-Object {
       (Test-Path -LiteralPath $_.Path) -and
       ((Get-FileHash -LiteralPath $_.Path -Algorithm SHA256).Hash -eq $_.SHA256)
@@ -249,6 +283,8 @@ if (Test-Path -LiteralPath $guardManifest) {
       Add-Result FAIL 'Claude Desktop / Code 直连防护' '未检测到已安装的 Claude Desktop 包'
     } elseif ($package.Version.ToString() -ne $manifest.PackageVersion) {
       Add-Result FAIL 'Claude Desktop / Code 直连防护' "Desktop=$($package.Version)，防护清单=$($manifest.PackageVersion)；升级后的断线防直连尚未复验"
+    } elseif ($pluginPathProblem) {
+      Add-Result FAIL 'Claude Desktop / Code 直连防护' $pluginPathProblem
     } elseif ($validTargets.Count -ne $targets.Count) {
       Add-Result FAIL 'Claude Desktop / Code 直连防护' ("文件基线仅 {0}/{1} 一致；需复验：{2}。英文启动器会拒绝启动，请先维护。" -f $validTargets.Count,$targets.Count,((@($targets | Where-Object { $_.Path -notin @($validTargets.Path) }) | ForEach-Object Name) -join '、'))
     } elseif (-not $stateReady) {
@@ -257,7 +293,8 @@ if (Test-Path -LiteralPath $guardManifest) {
       Add-Result FAIL 'Claude Desktop / Code 直连防护' '缺少与当前清单一致的管理员安装或 Verify 凭证'
     } else {
       $evidenceType = if ($verifyReady) { '管理员 Verify' } else { '管理员安装记录' }
-      Add-Result PASS 'Claude Desktop / Code 直连防护' "Desktop=$($package.Version)；目标哈希 $($validTargets.Count)/$($targets.Count)；6 条精确阻断规则有$evidenceType"
+      $ruleCount = $targets.Count * 2
+      Add-Result PASS 'Claude Desktop / Code 直连防护' "Desktop=$($package.Version)；目标哈希 $($validTargets.Count)/$($targets.Count)；$ruleCount 条精确阻断规则有$evidenceType"
     }
   } catch {
     Add-Result FAIL 'Claude Desktop / Code 直连防护' ('防护记录无法完整核验：' + $_.Exception.Message)

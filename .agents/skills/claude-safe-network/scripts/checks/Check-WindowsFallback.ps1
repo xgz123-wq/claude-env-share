@@ -10,7 +10,7 @@
       · TUN 的 strict-route / DNS 劫持（防旁路 + 防 DNS 泄漏）
       · 实体网卡的 IPv6 绑定状态（TUN 关闭时 IPv6 是真泄漏口）
       · hosts 文件不得有 Claude 相关劫持
-      · WFP 6 条精确阻断是否仍在位（只有管理员读得到 → 一次 UAC + 30 天缓存，见 Update-ElevatedVerifyCache）
+      · WFP 清单要求的精确阻断是否仍在位（只有管理员读得到 → 一次 UAC + 30 天缓存，见 Update-ElevatedVerifyCache）
 #>
 [CmdletBinding()]
 param([switch] $Json)
@@ -143,14 +143,64 @@ if (Test-Path $statePath) {
         $man = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
         foreach ($t in $man.Targets) { $expectedKeys += $t.V4; $expectedKeys += $t.V6 }
     }
+    $pluginPathProblem = ''
+    $pluginTargets = @($man.Targets | Where-Object Name -eq 'Claude Code VS Code 插件')
+    $pluginRegistry = Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
+    if ($pluginTargets.Count -ne 1) {
+        $pluginPathProblem = "防护清单里的 VS Code 插件目标数量为 $($pluginTargets.Count)，预期 1"
+    }
+    elseif (-not (Test-Path -LiteralPath $pluginRegistry)) {
+        $pluginPathProblem = '缺少 VS Code extensions.json，无法确认当前插件路径'
+    }
+    else {
+        $pluginRecords = @((Get-Content -LiteralPath $pluginRegistry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
+        if ($pluginRecords.Count -ne 1) {
+            $pluginPathProblem = "VS Code 当前登记的 Claude Code 插件数量为 $($pluginRecords.Count)，预期 1"
+        }
+        elseif ($pluginRecords[0].metadata.pinned -ne $true) {
+            $pluginPathProblem = 'VS Code Claude Code 插件未固定版本，自动更新可能更换未受保护的路径'
+        }
+        elseif ([string]$pluginRecords[0].metadata.targetPlatform -ne 'win32-x64') {
+            $pluginPathProblem = "VS Code Claude Code 插件平台为 $($pluginRecords[0].metadata.targetPlatform)，预期 win32-x64"
+        }
+        else {
+            $pluginRoot = [string]$pluginRecords[0].location.path
+            if ($pluginRoot -match '^/([A-Za-z]:/.*)$') { $pluginRoot = $Matches[1] }
+            $pluginRoot = $pluginRoot.Replace('/','\')
+            $currentPluginPath = Join-Path $pluginRoot 'resources\native-binary\claude.exe'
+            if ($pluginTargets[0].Path -ine $currentPluginPath) {
+                $pluginPathProblem = "VS Code 插件路径已变化：当前=$currentPluginPath；防护=$($pluginTargets[0].Path)"
+            }
+        }
+    }
+    $vsCodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
+    if (-not $pluginPathProblem -and (Test-Path -LiteralPath $vsCodeSettings)) {
+        $settingsText = Get-Content -LiteralPath $vsCodeSettings -Raw
+        $wrapperMatch = [regex]::Match($settingsText, '"claudeCode\.claudeProcessWrapper"\s*:\s*"([^"]*)"')
+        if ($wrapperMatch.Success -and $wrapperMatch.Groups[1].Value.Trim()) {
+            $pluginPathProblem = 'VS Code 配置了 claudeProcessWrapper，实际启动程序不再是受保护的插件 claude.exe'
+        }
+    }
     $installedKeys = @()
     foreach ($t in $st.Targets) { foreach ($f in $t.Filters) { $installedKeys += [string]$f.Key } }
-    Add-CheckResult -Status $(if ($installedKeys.Count -ge 6) { 'PASS' } else { 'FAIL' }) -Item '阻断记录数' `
-        -Evidence "安装记录含 $($installedKeys.Count) 条过滤器（清单要求 $($expectedKeys.Count) 条）"
+    $recordReady = ($installedKeys.Count -eq $expectedKeys.Count -and -not $pluginPathProblem)
+    $recordEvidence = "安装记录含 $($installedKeys.Count) 条过滤器（清单要求 $($expectedKeys.Count) 条）"
+    if ($pluginPathProblem) { $recordEvidence += "；$pluginPathProblem" }
+    Add-CheckResult -Status $(if ($recordReady) { 'PASS' } else { 'FAIL' }) -Item '阻断记录数' -Evidence $recordEvidence
 
     # 缓存新鲜就直接用；缺失或过期就当场发起一次 UAC（见 Common.ps1 的 Update-ElevatedVerifyCache）。
     # 已经在管理员上下文时它不会弹窗，直接干活。用户要做的只有那一下「是」。
-    $elev = Update-ElevatedVerifyCache -MaxAgeDays 30
+    $manifestHash = if (Test-Path -LiteralPath $manifestPath) { (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash } else { '' }
+    $expectedKeySet = @($expectedKeys | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object)
+    $cacheBefore = Read-ElevatedVerifyCache
+    $cacheKeySet = @($cacheBefore.WfpKeys | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object)
+    $cacheBindingMismatch = ($cacheBefore -and (
+        [int]$cacheBefore.WfpExpected -ne $expectedKeys.Count -or
+        [string]$cacheBefore.ManifestSHA256 -ne $manifestHash -or
+        [string]$cacheBefore.PkgVersion -ne [string]$man.PackageVersion -or
+        ($cacheKeySet -join '|') -cne ($expectedKeySet -join '|')
+    ))
+    $elev = if ($cacheBindingMismatch) { Update-ElevatedVerifyCache -MaxAgeDays 0 } else { Update-ElevatedVerifyCache -MaxAgeDays 30 }
     $wfpCache = $elev.Cache
     $skip = ''
     if ($elev.Skipped) { $skip = "（$($elev.Skipped)）" }
@@ -161,6 +211,12 @@ if (Test-Path $statePath) {
     }
     elseif ($elev.Age -ne $null -and $elev.Age -gt 30) {
         Add-CheckResult -Status 'WARN' -Item 'WFP 实盘核对' -Evidence "缓存已 $($elev.Age) 天（有效期 30 天），且刚才的提权复跑没能刷新它$skip"
+    }
+    elseif ([int]$wfpCache.WfpExpected -ne $expectedKeys.Count -or
+            [string]$wfpCache.ManifestSHA256 -ne $manifestHash -or
+            [string]$wfpCache.PkgVersion -ne [string]$man.PackageVersion -or
+            ((@($wfpCache.WfpKeys | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object) -join '|') -cne ($expectedKeySet -join '|'))) {
+        Add-CheckResult -Status 'FAIL' -Item 'WFP 实盘核对' -Evidence '提权缓存与当前清单哈希、Desktop 版本或规则 GUID 不一致；必须重新提权核对'
     }
     elseif ($wfpCache.WfpPassed) {
         $detail['wfp'] = @($wfpCache.WfpDetail)

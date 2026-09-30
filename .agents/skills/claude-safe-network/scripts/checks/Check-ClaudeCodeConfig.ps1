@@ -79,7 +79,7 @@ else {
                 Add-CheckResult -Status 'PASS' -Item 'env.DISABLE_AUTOUPDATER' -Evidence "$($map['DISABLE_AUTOUPDATER'])（你是有意关的；升级走手动）"
             }
             else {
-                Add-CheckResult -Status 'WARN' -Item 'env.DISABLE_AUTOUPDATER' -Evidence '未关 —— 自动升级可能撞上 WFP 6 条规则里的旧路径哈希'
+                Add-CheckResult -Status 'WARN' -Item 'env.DISABLE_AUTOUPDATER' -Evidence '未关 —— 自动升级可能撞上 WFP 清单里的旧路径哈希'
             }
 
             if ($map['BROWSER']) {

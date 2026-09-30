@@ -94,7 +94,7 @@ try {
    [pscustomobject]@{Name=$target.Name;Path=$target.Path;Filters=(Select-Filter ([ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Verify($target.Path,[guid]$target.V4,[guid]$target.V6,$true)))}
   })
   $record.ExistingRulesVerified=$verified
-  # 仅在独立探针上添加/撤销测试规则；Claude 的现有六条规则始终保留。
+  # 仅在独立探针上添加/撤销测试规则；Claude 的现有规则始终保留。
   if($SkipNetworkProbe){
    $record.Test=[ordered]@{Status='skipped';Reason='同路径基线维护，仅核验现有规则与文件；未执行联网阻断测试。'}
   }else{Test-Guard}

@@ -1,6 +1,6 @@
 # Claude 配置总览
 
-> 更新日期：2026-09-25
+> 更新日期：2026-09-30
 > `docs/配置/Claude环境/` 是 Claude/Clash 配置的唯一位置；桌面快捷方式和总检按「脚本目录往上 3 层 = 项目根」定位，不要改目录名或层级。
 
 ## 目录
@@ -23,12 +23,13 @@
 |---|---|
 | Claude Desktop | `2.9939.2.0`，自动更新关闭 |
 | Claude Code CLI | `2.1.282`，指纹已同步 |
-| 直连防护 | 3 个程序、6 条 WFP 规则 |
+| Claude Code VS Code 插件 | 安装后固定版本，并把当前插件内置 `claude.exe` 路径纳入防护 |
+| 直连防护 | 4 个程序、8 条 WFP 规则 |
 | 验证 | 一键总检 13 PASS / 1 MANUAL（2026-09-25） |
 
 | 入口 | 路线 |
 |---|---|
-| Claude Code | HTTP `43865`，Claude 域名按规则进 `ACCOUNT-US` |
+| Claude Code CLI / VS Code 插件 | HTTP `43865`，Claude 域名按规则进 `ACCOUNT-US` |
 | 专用 Chrome | SOCKS `43866 → ACCOUNT-US` |
 | Claude Desktop | HTTP `43867 → ACCOUNT-US` |
 
