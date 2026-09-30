@@ -78,11 +78,19 @@ function main(config, profileName) {
     config.dns["nameserver-policy"][domain] = dnsServers.slice();
   });
 
-  // 只去重本模板生成的完全相同条目，保留原订阅规则及顺序。
+  // 去掉订阅里的邮件端口无条件 DIRECT；邮件流量继续按后续 CN / MATCH 规则分流。
+  function isUnconditionalMailDirectRule(rule) {
+    if (typeof rule !== "string") return false;
+    return /^DST-PORT,(25|110|143|465|587|993|995),DIRECT(?:,.*)?$/i.test(
+      rule.replace(/\s+/g, "")
+    );
+  }
+
+  // 除上述七个邮件端口无条件 DIRECT 外，只去重本模板生成的条目，保留其他订阅规则及顺序。
   // DOMAIN 匹配目标地址，不匹配 Chrome/CLI/Desktop 进程。
   if (!Array.isArray(config.rules)) config.rules = [];
   config.rules = addedRules.concat(config.rules.filter(function (rule) {
-    return addedRules.indexOf(rule) < 0;
+    return addedRules.indexOf(rule) < 0 && !isUnconditionalMailDirectRule(rule);
   }));
   // 不添加 MATCH、不改 TUN 开关、不写订阅节点、不要求 ASN 数据库。
   return config;
