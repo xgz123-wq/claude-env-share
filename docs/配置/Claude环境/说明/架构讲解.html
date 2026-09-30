@@ -585,8 +585,8 @@
   <li>订阅自带的主组（<code>MATCH</code> 指向的那个）→ <b>选另一个不同的节点</b></li>
 </ol>
 
-<h3 class="rv">2.5 改完必须重启</h3>
-<p class="rv">Clash Verge 的 HTTP 控制接口默认是关的，<b>没有 API 可以热重载</b>。改完任何配置文件，必须重启 Clash Verge 的<b>界面进程</b>（不是内核进程）。</p>
+<h3 class="rv">2.5 改完必须重新加载并核验</h3>
+<p class="rv">本方案不依赖 mihomo 的 <code>9097</code> HTTP 控制端口；项目脚本可以通过 <code>\\.\pipe\verge-mihomo</code> 命名管道执行受控热重载。手动改配置后由用户在 Clash Verge 中应用或重载，再运行验证脚本读取运行态；模型默认不代用户重启或热重载 Clash。</p>
 
 <h3 class="rv">2.6 关于通用国外服务的规则</h3>
 <div class="box tip rv"><span class="t">一个简单的判断法</span>
@@ -820,7 +820,7 @@
 <tr><td>只关了一层 IPv6</td><td class="no">IPv6 流量绕过代理直连</td><td>三层都关，五项自检会查</td></tr>
 <tr><td>规则指向不存在的代理组</td><td class="no">静默失效，看着正常实际没生效</td><td>脚本自建组，不引用订阅组名</td></tr>
 <tr><td>把全机 DNS 改成国外 DoH</td><td class="no">国内应用（飞书、企业内网）全部断网</td><td>只给 Claude 域名换解析器</td></tr>
-<tr><td>改完配置没重启</td><td class="no">以为生效了其实没有</td><td>重启 Clash Verge 界面进程</td></tr>
+<tr><td>改完配置没应用或重载</td><td class="no">以为生效了其实没有</td><td>由用户在 Clash Verge 中应用或重载，再运行验证脚本读取运行态</td></tr>
 <tr><td>用 AI 旧文档或旧脚本覆盖现场 <code>Script.js</code></td><td class="no">新规则被旧版冲掉</td><td>先比对再改，以现场为准</td></tr>
 </table></div>
 
