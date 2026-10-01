@@ -713,6 +713,7 @@
 <tr><td>HKLM 策略 <code>egressProxyUrl = http://127.0.0.1:43867</code></td><td>让 Desktop 的网络请求走专用口</td><td><code>Desktop防护/专用通道管理.ps1</code></td></tr>
 <tr><td>HKLM 策略 <code>disableAutoUpdates = 1</code></td><td>关自动更新；更新改走受控流程（先给新版加防护，再切换版本）</td><td><code>Desktop防护/Claude自动更新管理.ps1</code></td></tr>
 <tr><td>WFP 直连防护：4 个程序 × IPv4/IPv6 = 8 条规则</td><td>Desktop 主程序、CLI 的两个程序文件和 VS Code 插件内置程序只允许连本机回环地址；想绕过代理直连会被挡，但不阻断整个 <code>Code.exe</code></td><td><code>Desktop防护/应用直连防护管理.ps1</code></td></tr>
+<tr><td>Anthropic IPv4 网段直连阻断：<code>160.79.104.0/23</code></td><td>Windows 防火墙阻断所有程序直接连接该网段；本机代理入口不受影响。该网段不是 Claude 所有服务地址的完整清单</td><td><code>Anthropic网段直连阻断.ps1</code>；<a href="Anthropic网段直连阻断.md">使用说明</a></td></tr>
 </table></div>
 
 <div class="box warn rv"><span class="t">自动更新不要用 Enable 打开</span>

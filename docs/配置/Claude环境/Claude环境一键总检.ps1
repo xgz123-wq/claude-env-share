@@ -14,6 +14,7 @@ $guardManifest = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\
 $guardState = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用直连防护状态.json'
 $guardVerify = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用直连防护-Verify.json'
 $guardInstall = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用直连防护-最近操作.json'
+$rangeCheck = Join-Path $PSScriptRoot 'Anthropic网段直连阻断.ps1'
 $desktopConfigRoot = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
 $desktopMeta = Join-Path $desktopConfigRoot '_meta.json'
 $expectedDesktopProxy = 'http://127.0.0.1:43867'
@@ -301,6 +302,19 @@ if (Test-Path -LiteralPath $guardManifest) {
   }
 } else {
   Add-Result FAIL 'Claude Desktop / Code 直连防护' "缺少防护清单：$guardManifest"
+}
+
+if (-not (Test-Path -LiteralPath $rangeCheck)) {
+  Add-Result FAIL 'Anthropic 网段直连阻断' "缺少检查脚本：$rangeCheck"
+} else {
+  try {
+    $engine = (Get-Process -Id $PID).Path
+    $rangeResult = (& $engine -NoProfile -ExecutionPolicy Bypass -File $rangeCheck -Action Check -Json 2>$null | Out-String) | ConvertFrom-Json
+    if ($rangeResult.Succeeded) { Add-Result PASS 'Anthropic 网段直连阻断' $rangeResult.Evidence }
+    else { Add-Result FAIL 'Anthropic 网段直连阻断' $rangeResult.Evidence }
+  } catch {
+    Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
+  }
 }
 
 Add-Result MANUAL '网页最终验收' '专用 Chrome / Desktop 内置浏览器分别确认：Claude IP、DNS、WebRTC、IPv6、语言和时区全绿'

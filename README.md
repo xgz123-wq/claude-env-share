@@ -1,6 +1,6 @@
 # Claude 环境分享版
 
-> **版本**：2026-09-23，从一台已稳定运行的 Windows 机器整理而来
+> **版本**：2026-10-01，从一台已稳定运行的 Windows 机器整理而来
 > **用途**：让另一台 Windows 机器照着部署一套「Claude Code + Claude Desktop + 专用 Chrome 走同一个干净出口」的环境
 > **个人信息**：账号别名、出口 IP、本机状态文件已去掉；版本号、路径等标为「原机器参考值」的内容以你自己的实测为准
 
@@ -24,7 +24,7 @@
 | 层 | 做什么 | 位置 |
 |---|---|---|
 | Clash | Claude 域名固定走 `ACCOUNT-US`；三个专用端口 `43865` / `43866` / `43867`；DNS 分层 | `docs/配置/Claude环境/Clash/` |
-| 系统 | IPv6 三层关闭；TUN 开、系统代理关；关定位、杀软白名单 | `说明/DNS分层说明.md`、`说明/架构讲解.html` 第七步 |
+| 系统 | IPv6 三层关闭；TUN 开、系统代理关；`160.79.104.0/23` 直连出站阻断；关定位、杀软白名单 | `说明/DNS分层说明.md`、`说明/Anthropic网段直连阻断.md`、`说明/架构讲解.html` 第七步 |
 | Claude Code | `~/.claude/settings.json` 的 `env` 指向 `43865` | Skill `claude-safe-network` |
 | 专用 Chrome | 每个账号独立用户目录，SOCKS `43866`，防 DNS / WebRTC 泄漏 | `docs/配置/Claude环境/说明/账号浏览器.md` |
 | Claude Desktop | HKLM 策略走 `43867`、关自动更新、直连防护（WFP） | `docs/配置/Claude环境/Desktop防护/` |

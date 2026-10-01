@@ -25,10 +25,11 @@
 | 4 专用 Chrome | 每个账号建独立浏览器：`创建账号浏览器.ps1 -Alias 账号1`（别名由用户定） | Skill `scripts/apply/创建账号浏览器.ps1`、`docs/配置/Claude环境/说明/账号浏览器.md` |
 | 5 Desktop 通道 | `Desktop防护/专用通道管理.ps1 -Action Install`（43867 与 HKLM `egressProxyUrl`）；`Claude自动更新管理.ps1 -Action Disable` | `docs/配置/Claude环境/Desktop防护/更新维护说明.md` |
 | 6 直连防护 | 按 `应用过滤目标.示例.json` 生成本机 `应用过滤目标.json`：填本机真实路径，SHA256 审核后填写，GUID 新生成；再 `应用直连防护管理.ps1 -Action Install`（管理员） | 同上 |
+| 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/Anthropic网段直连阻断.md` |
 | 7 快捷方式 | 桌面建「Claude-英文浏览器」「Claude-五项自检」「Claude-环境一键总检」及各账号 Chrome 快捷方式；复制一份到 Skill `assets/shortcuts/` | Skill `scripts/apply/升级现有Claude快捷方式.ps1`、`references/03-变更与回滚SOP.md` |
 | 8 验收 | 一键总检 0 FAIL；Skill 全量体检；用户肉眼核对检测站；把结果写进 `维护日志.md` 和 Skill `references/00-baseline.md` | `docs/配置/Claude环境/Claude环境一键总检.ps1` |
 
-- **分享版的已知问题**：步骤 7 之前，`Check-SuiteIntegrity` 的快捷方式备份项报 WARN；步骤 6 之前，总检的直连防护项报 FAIL。都属预期，做完对应步骤后消失。
+- **分享版的已知问题**：步骤 7 之前，`Check-SuiteIntegrity` 的快捷方式备份项报 WARN；步骤 6 之前，总检的直连防护项报 FAIL；步骤 6a 之前，网段阻断项报 FAIL。都属预期，做完对应步骤后消失。
 
 ## 维护工作流程（部署后）
 

@@ -26,6 +26,7 @@ $guardManifest = Join-Path $guardDirectory '应用过滤目标.json'
 $guardState = Join-Path $guardDirectory '应用直连防护状态.json'
 $guardVerify = Join-Path $guardDirectory '应用直连防护-Verify.json'
 $guardInstall = Join-Path $guardDirectory '应用直连防护-最近操作.json'
+$rangeCheck = Join-Path $scriptsRoot 'apply\Anthropic网段直连阻断.ps1'
 $desktopConfigRoot = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
 $desktopMeta = Join-Path $desktopConfigRoot '_meta.json'
 $expectedDesktopProxy = "http://127.0.0.1:$portDesktop"
@@ -313,6 +314,19 @@ if (Test-Path -LiteralPath $guardManifest) {
   }
 } else {
   Add-Result FAIL 'Claude Desktop / Code 直连防护' "缺少防护清单：$guardManifest"
+}
+
+if (-not (Test-Path -LiteralPath $rangeCheck)) {
+  Add-Result FAIL 'Anthropic 网段直连阻断' "缺少检查脚本：$rangeCheck"
+} else {
+  try {
+    $engine = (Get-Process -Id $PID).Path
+    $rangeResult = (& $engine -NoProfile -ExecutionPolicy Bypass -File $rangeCheck -Action Check -Json 2>$null | Out-String) | ConvertFrom-Json
+    if ($rangeResult.Succeeded) { Add-Result PASS 'Anthropic 网段直连阻断' $rangeResult.Evidence }
+    else { Add-Result FAIL 'Anthropic 网段直连阻断' $rangeResult.Evidence }
+  } catch {
+    Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
+  }
 }
 
 # 网页最终验收：不再标 MANUAL，而是真实去 ping0.cc / ip.net.coffee 渲染取数后判定。

@@ -23,6 +23,7 @@
 - **三个入口**：Claude Code `43865`（HTTP）、专用 Chrome `43866`（SOCKS5）、Claude Desktop `43867`（HTTP），都汇到 `ACCOUNT-US` 组。
 - **只代理 Claude**：TUN + 规则分流，系统代理关闭。
 - **四层兜底**：置顶规则防走错组；TUN strict-route + 53 劫持防 DNS 旁路；WFP 精确阻断防直连；端口漂移检测防漏改。
+- **指定网段补充**：Windows 防火墙阻断 `160.79.104.0/23` 的直接出站连接；`scripts\apply\Anthropic网段直连阻断.ps1` 默认只读检查，管理员运行 `-Action Install` 可安装。它不覆盖 Claude 的全部地址。
 
 ## 适用条件
 
@@ -56,7 +57,7 @@
 | **L3** Claude Code | `~\.claude\settings.json` 的 `env` 代理 | `Check-ClaudeCodeConfig.ps1` |
 | **L4** 专用 Chrome | 账号隔离 User Data + 防旁路参数 | `Check-ChromeEntry.ps1` |
 | **L5** Claude Desktop | 注册表策略 + configLibrary + 禁更同层 | `Check-DesktopConfig.ps1` |
-| **L6** Windows 系统兜底 | WFP 直连阻断 / IPv6 / hosts / 快捷方式目标存在性 | `Check-WindowsFallback.ps1` |
+| **L6** Windows 系统兜底 | WFP 直连阻断 / 指定 Anthropic 网段防火墙规则 / IPv6 / hosts / 快捷方式目标存在性 | `Check-WindowsFallback.ps1`、`Claude环境一键总检.ps1` |
 | **L7** 出口验收 | IP 信誉 + Cloudflare trace + 无头渲染网页层 | `Check-IpReputation.ps1`、`Check-ClaudeIp.ps1` |
 | 贯穿 | 端口一致性（真源 vs 字面量 vs 实际） | `Check-PortConsistency.ps1` |
 | 贯穿套件 | 相对路径 / 语法 / 外部路径残留 / PS 版本守卫 | `Check-SuiteIntegrity.ps1` |

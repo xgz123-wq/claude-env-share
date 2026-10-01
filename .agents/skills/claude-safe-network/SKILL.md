@@ -48,14 +48,14 @@ claude-safe-network/                      ← 整个目录可拷贝，零外部�
 ├── scripts/
 │   ├── Common.ps1                         ★ 套件基石：真源加载 + 输出渲染 + 网络/子进程工具 + JSON 交接
 │   ├── Invoke-ClaudeSafetyCheck.ps1       ★ 9 层编排器（一键跑全部，支持 -Fast / -Only / -Json）
-│   ├── Claude环境一键总检.ps1               ★ 人工验收主入口（14 项，含网页最终验收）
+│   ├── Claude环境一键总检.ps1               ★ 人工验收主入口（含 Anthropic 网段规则与网页最终验收）
 │   ├── checks/     Check-ProxyStack / ClaudeCodeConfig / ChromeEntry / DesktopConfig
 │   │               WindowsFallback / PortConsistency / IpReputation / ClaudeIp / SuiteIntegrity
 │   ├── clash/      Clash全局账号通道.js（全局扩展脚本权威副本）+ 验证 / 五项自检
 │   ├── desktop/    启动Claude英文浏览器.ps1
 │   │   └── 维护文件/  WFP 直连防护（.cs + 管理脚本）、DNS 修复、通道管理、自动更新管理 + 运行时状态 JSON
-│   ├── apply/      安装 / 修复 / 更新类（Repair-Shortcuts 校验与还原 / 修复Clash全机DNS / 创建账号浏览器 /
-│   │               启用-PowerShell7入口 / …）
+│   ├── apply/      安装 / 修复 / 更新类（Anthropic网段直连阻断 / Repair-Shortcuts 校验与还原 /
+│   │               修复Clash全机DNS / 创建账号浏览器 / 启用-PowerShell7入口 / …）
 │   └── rollback/   回滚Clash配置.ps1
 ├── assets/
 │   ├── ico/Claude官方图标.ico
@@ -84,7 +84,7 @@ pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1 -Only proxy,code,desktop
 # ④ 机器可读（输出里带 ===JSON-BEGIN=== / ===JSON-END=== 标记块）
 pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1 -Fast -Json
 
-# ⑤ 人工验收主入口（14 项，最后一项会打开交接网页）
+# ⑤ 人工验收主入口（含网段阻断检查；-OpenBrowser 才打开交接网页）
 pwsh -File scripts\Claude环境一键总检.ps1 -OpenBrowser
 
 # ⑥ 改端口后：拿「文件:行号」字面量清单，照单同步
@@ -101,7 +101,11 @@ pwsh -File scripts\checks\Check-SuiteIntegrity.ps1
 pwsh -File scripts\checks\Check-IpReputation.ps1
 pwsh -File scripts\checks\Check-ClaudeIp.ps1
 
-# ⑩ .ps1 右键入口：加 / 撤「用 PowerShell 7 运行」（默认只报告；只写 HKCU，不需要管理员）
+# ⑩ Anthropic 官方 API/Console IPv4 网段：默认只读检查；安装需管理员
+pwsh -File scripts\apply\Anthropic网段直连阻断.ps1
+pwsh -File scripts\apply\Anthropic网段直连阻断.ps1 -Action Install
+
+# ⑪ .ps1 右键入口：加 / 撤「用 PowerShell 7 运行」（默认只报告；只写 HKCU，不需要管理员）
 pwsh -File scripts\apply\启用-PowerShell7入口.ps1
 pwsh -File scripts\apply\启用-PowerShell7入口.ps1 -Apply
 pwsh -File scripts\apply\启用-PowerShell7入口.ps1 -Rollback
@@ -168,7 +172,7 @@ WFP 实盘核对已降级为 `pwsh -File scripts\checks\Request-ElevatedVerify.p
 | 坑 | 错误做法 | 正确做法 |
 |---|---|---|
 | **注册表** | 猜路径去查 `HKLM\SOFTWARE\Policies\Anthropic\Claude` | 真实路径是 `HKLM\SOFTWARE\Policies\Claude`（**没有** `Anthropic` 层） |
-| **防火墙** | 用 `Get-NetFirewallRule` 找阻断规则，找不到就以为缺失 | 机制是 **WFP 过滤器**（由 `应用直连过滤.cs` 安装），不在防火墙规则表里。去看 `scripts\desktop\维护文件\应用直连防护状态.json` |
+| **防火墙** | 把两个直连阻断机制混为一谈 | Claude 程序的精确 WFP 过滤器不在 `Get-NetFirewallRule` 里；`160.79.104.0/23` 的系统出站规则在防火墙规则表里，用 `scripts\apply\Anthropic网段直连阻断.ps1` 核对。网段规则不覆盖 Claude 全部地址。 |
 | **运行脚本** | 用 Windows PowerShell 5.1 跑 | 必须用 **pwsh 7**：脚本是无 BOM UTF-8，5.1 会按 GBK 读 → 整片解析失败 |
 | **PowerShell 版本** | 机器上同时有 `powershell.exe`(5.1) 和 `pwsh.exe`(7)，以为「冲突了，卸掉一个」 | **不是冲突，是正常共存**：5.1 是 Windows 系统组件（**不可卸载**），7 是独立安装。正确解法 = **脚本一律显式用 pwsh 7 全路径调用**，跨版本调用时写 `#requires -Version 7.0` |
 
