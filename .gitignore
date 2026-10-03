@@ -1,0 +1,23 @@
+# 分享链接等个人外发文件，不随包分发
+分享链接.txt
+
+# 防护运行状态：本机产物，每台机器自行生成，导入别人的会失效或拦错程序
+docs/配置/Claude环境/Desktop防护/应用过滤目标.json
+docs/配置/Claude环境/Desktop防护/应用直连防护状态.json
+docs/配置/Claude环境/Desktop防护/应用直连防护-Verify.json
+docs/配置/Claude环境/Desktop防护/应用直连防护-Refresh.json
+docs/配置/Claude环境/Desktop防护/应用直连防护-最近操作.json
+docs/配置/Claude环境/Desktop防护/安装状态.json
+.agents/skills/claude-safe-network/scripts/desktop/维护文件/应用过滤目标.json
+.agents/skills/claude-safe-network/scripts/desktop/维护文件/应用直连防护*.json
+.agents/skills/claude-safe-network/scripts/desktop/维护文件/安装状态.json
+
+# 快捷方式备份含本机绝对路径，按约定在本机生成
+.agents/skills/claude-safe-network/assets/shortcuts/*.lnk
+
+# 系统与工具临时文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+__pycache__/
+*.pyc
