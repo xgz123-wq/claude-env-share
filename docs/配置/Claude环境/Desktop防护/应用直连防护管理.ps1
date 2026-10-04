@@ -1,7 +1,8 @@
 #requires -Version 7.0
 param(
- [ValidateSet('Test','Install','Verify','Rollback','Refresh')][string]$Action='Verify',
+ [ValidateSet('Test','Install','Verify','Rollback','Refresh','MigratePlugin')][string]$Action='Verify',
  # Refresh 只适用于路径、Desktop 版本均未变化；必须显式传入人工核对过的目标哈希（按清单顺序）。
+ # MigratePlugin 只传一个：VS Code 当前登记的新插件 claude.exe 的已审核哈希。
  [string[]]$ApprovedSHA256,
  # 同路径维护可显式跳过联网探针；仍核验签名、全部现有规则及刷新后的文件基线。
  [switch]$SkipNetworkProbe
@@ -80,7 +81,7 @@ try {
  if(@($targetPaths|Select-Object -Unique).Count -ne $manifest.Targets.Count){throw '目标清单包含重复程序路径。'}
  $keys=[guid[]]@($manifest.Targets|ForEach-Object {[guid]$_.V4;[guid]$_.V6})
  if(@($keys|Select-Object -Unique).Count -ne ($manifest.Targets.Count*2)){throw 'GUID 清单无效。'}
- if($Action -in @('Test','Install','Rollback','Refresh')){
+ if($Action -in @('Test','Install','Rollback','Refresh','MigratePlugin')){
   Assert-Closed
   if(-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw '写入系统过滤规则需要管理员权限。'}
  }
@@ -129,6 +130,60 @@ try {
    foreach($path in $restorePaths){Copy-Item -LiteralPath (Join-Path $backup ([IO.Path]::GetFileName($path))) -Destination $path -Force}
    throw
   }
+ }
+ if($Action -eq 'MigratePlugin'){
+  # 插件升级换版本目录：先给新路径加规则并核验，清单与状态一起改，最后才撤旧规则；不跑联网探针，与 Desktop 迁移同一做法。
+  if(@($ApprovedSHA256).Count -ne 1 -or $ApprovedSHA256[0] -notmatch '^[A-Fa-f0-9]{64}$'){throw 'MigratePlugin 需要且只需要一个已审核的新插件 SHA256。'}
+  $approved=$ApprovedSHA256[0].ToUpperInvariant()
+  $registry=Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
+  $records=@((Get-Content -LiteralPath $registry -Raw|ConvertFrom-Json)|Where-Object {$_.identifier.id -ieq 'anthropic.claude-code'})
+  if($records.Count -ne 1 -or $records[0].metadata.pinned -ne $true -or [string]$records[0].metadata.targetPlatform -ne 'win32-x64'){throw 'VS Code 登记的 Claude Code 插件须唯一、已固定版本且为 win32-x64。'}
+  $pluginRoot=[string]$records[0].location.path
+  if($pluginRoot -match '^/([A-Za-z]:/.*)$'){$pluginRoot=$Matches[1]}
+  $newPath=Join-Path $pluginRoot.Replace('/','\') 'resources\native-binary\claude.exe'
+  $pluginTargets=@($manifest.Targets|Where-Object {$_.Path -match '\\\.vscode\\extensions\\anthropic\.claude-code-[^\\]+\\resources\\native-binary\\claude\.exe$'})
+  if($pluginTargets.Count -ne 1){throw '清单里应恰好有一个 VS Code 插件目标。'}
+  $old=$pluginTargets[0]|ConvertTo-Json -Depth 5|ConvertFrom-Json
+  if($old.Path -ieq $newPath){throw '插件路径没有变化；同路径换文件请用 Refresh。'}
+  if((Get-FileHash -LiteralPath $newPath -Algorithm SHA256).Hash -ne $approved){throw '新插件程序与已审核哈希不符。'}
+  $signature=Get-AuthenticodeSignature -LiteralPath $newPath
+  if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O="?Anthropic, PBC"?(,|$)'){throw '新插件程序缺少有效的 Anthropic 签名。'}
+  $state=Get-Content -LiteralPath $statePath -Raw|ConvertFrom-Json
+  if($state.Status -notlike 'installed_*' -or $state.ManifestSHA256 -ne (Get-FileHash -LiteralPath $manifestPath).Hash){throw '原安装状态与清单不一致，停止迁移。'}
+  # 旧插件目录可能已被 VS Code 清掉，旧规则用 GUID 读回核对；其余三个目标照常按路径核验。
+  foreach($key in @([guid]$old.V4,[guid]$old.V6)){$f=[ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Get($key);if($null -eq $f -or -not $f.IsOwnedExactBlock -or -not $f.Enabled){throw '旧插件规则缺失或被改动，停止迁移。'}}
+  $others=@($manifest.Targets|Where-Object {$_.Path -ine $old.Path}|ForEach-Object {[pscustomobject]@{Name=$_.Name;Path=$_.Path;Filters=(Select-Filter ([ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Verify($_.Path,[guid]$_.V4,[guid]$_.V6,$true)))}})
+  $backup=Join-Path $env:LOCALAPPDATA ('ClaudeNetworkGuard\插件迁移-'+(Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+  $null=New-Item -ItemType Directory -Path $backup
+  $verifyPath=Join-Path $PSScriptRoot '应用直连防护-Verify.json'
+  $restorePaths=@($manifestPath,$statePath,$verifyPath)|Where-Object {Test-Path -LiteralPath $_}
+  foreach($path in $restorePaths){Copy-Item -LiteralPath $path -Destination $backup}
+  $newV4=[guid]::NewGuid();$newV6=[guid]::NewGuid()
+  $record.Migration=[ordered]@{OldPath=$old.Path;NewPath=$newPath;NewSHA256=$approved;NewV4=[string]$newV4;NewV6=[string]$newV6;Backup=$backup}
+  Save-Report
+  try {
+   $null=[ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Add($newPath,$newV4,$newV6,$true)
+   $newFilters=Select-Filter ([ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Verify($newPath,$newV4,$newV6,$true))
+   $pluginTargets[0].Path=$newPath;$pluginTargets[0].SHA256=$approved;$pluginTargets[0].V4=[string]$newV4;$pluginTargets[0].V6=[string]$newV6
+   $manifest.PreparedAt=Get-Date -Format o
+   $manifest.Status='migrated_current_paths_pending_desktop_e2e'
+   $manifest|ConvertTo-Json -Depth 12|Set-Content -LiteralPath $manifestPath -Encoding utf8
+   $state.ManifestSHA256=(Get-FileHash -LiteralPath $manifestPath).Hash
+   $state.Targets=@($manifest.Targets|ForEach-Object {$t=$_;if($t.Path -ieq $newPath){[pscustomobject]@{Name=$t.Name;Path=$t.Path;Filters=$newFilters}}else{@($others|Where-Object {$_.Path -ieq $t.Path})[0]}})
+   $state.Status='installed_current_paths_pending_desktop_e2e'
+   $state|Add-Member -NotePropertyName RevalidatedAt -NotePropertyValue (Get-Date -Format o) -Force
+   $state|ConvertTo-Json -Depth 12|Set-Content -LiteralPath $statePath -Encoding utf8
+  } catch {
+   # 旧规则还在：撤掉新规则、恢复清单与状态，回到迁移前。
+   $added=[guid[]]@(@($newV4,$newV6)|Where-Object {$null -ne [ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Get($_)})
+   if($added.Count){$record.MigrationRollback=[ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Remove($added)}
+   foreach($path in $restorePaths){Copy-Item -LiteralPath (Join-Path $backup ([IO.Path]::GetFileName($path))) -Destination $path -Force}
+   throw
+  }
+  # 新规则和新清单都已生效后才撤旧规则；撤除失败时新旧规则并存，不影响防护。
+  $removed=[ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Remove([guid]$old.V4,[guid]$old.V6)
+  if($removed -ne 2 -or $null -ne [ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Get([guid]$old.V4) -or $null -ne [ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Get([guid]$old.V6)){throw '旧插件规则清理结果不符；新规则已生效，旧规则需人工核对。'}
+  $record.Migration.OldRulesRemoved=$removed
  }
  if($Action -eq 'Test'){Test-Guard}
  if($Action -eq 'Install'){

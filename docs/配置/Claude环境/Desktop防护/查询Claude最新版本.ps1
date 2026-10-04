@@ -56,6 +56,18 @@ try {
     $records = @((Get-Content -LiteralPath $registry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
     if ($records.Count -ne 1) { throw ('extensions.json 登记的 Claude Code 插件数量为 ' + $records.Count + '，预期 1') }
     $plugin.Installed = [string]$records[0].version
+    # 顺带报告防护是否覆盖当前插件目录；换了目录就给出新程序的指纹与签名，供 -PluginApprovedSHA256 审核。
+    $pluginRoot = [string]$records[0].location.path
+    if ($pluginRoot -match '^/([A-Za-z]:/.*)$') { $pluginRoot = $Matches[1] }
+    $exe = Join-Path $pluginRoot.Replace('/','\') 'resources\native-binary\claude.exe'
+    $protected = @((Get-Content -LiteralPath (Join-Path $PSScriptRoot '应用过滤目标.json') -Raw | ConvertFrom-Json).Targets.Path)
+    $plugin.ProtectedPathMatches = [bool]($protected -contains $exe)
+    if (-not $plugin.ProtectedPathMatches -and (Test-Path -LiteralPath $exe)) {
+        $plugin.CurrentExe = $exe
+        $plugin.CurrentSHA256 = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+        $sig = Get-AuthenticodeSignature -LiteralPath $exe
+        $plugin.Signature = [string]$sig.Status + '；' + [string]$sig.SignerCertificate.Subject
+    }
     $body = '{"filters":[{"criteria":[{"filterType":7,"value":"anthropic.claude-code"}]}],"flags":16}'
     $r = Invoke-RestMethod -Uri 'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery' -Method Post -Body $body -ContentType 'application/json' -Headers @{Accept='application/json;api-version=7.2-preview.1'} -Proxy $Proxy -TimeoutSec 60
     $versions = @($r.results[0].extensions[0].versions | Where-Object { $_.targetPlatform -eq 'win32-x64' } | ForEach-Object { [version]$_.version } | Sort-Object -Descending)

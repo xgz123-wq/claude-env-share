@@ -6,6 +6,8 @@ param(
     [string]$ApprovedSHA256,
     # CLI 或插件同路径更新后按清单顺序传入四个已审核指纹；与 Desktop 更新共用同一次 UAC，先刷新再迁移。
     [string[]]$CliApprovedSHA256,
+    # VS Code 插件升级换了版本目录时传入新插件 claude.exe 的已审核指纹；先迁移插件，再刷新 CLI，最后迁移 Desktop。
+    [string]$PluginApprovedSHA256,
     [string]$ResumeJournal,
     [switch]$Worker,
     [string]$ResultDirectory,
@@ -53,7 +55,11 @@ function Remove-UsedPackages {
     [ordered]@{Removed=$removed;Errors=$errors}
 }
 try {
-    foreach ($value in @($PackagePath,$ApprovedSHA256,$ResumeJournal,$ResultDirectory,$ExpectedUserSid) + @($CliApprovedSHA256)) { $null = Quote-Literal $value }
+    foreach ($value in @($PackagePath,$ApprovedSHA256,$ResumeJournal,$ResultDirectory,$ExpectedUserSid,$PluginApprovedSHA256) + @($CliApprovedSHA256)) { $null = Quote-Literal $value }
+    if ($PluginApprovedSHA256) {
+        if ($Action -ne 'Update') { throw 'PluginApprovedSHA256 只用于 Update。' }
+        if ($PluginApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'PluginApprovedSHA256 必须是一个 SHA256。' }
+    }
     if ($CliApprovedSHA256) {
         if ($Action -ne 'Update') { throw 'CliApprovedSHA256 只用于 Update。' }
         if (@($CliApprovedSHA256).Count -ne 4 -or @($CliApprovedSHA256 | Where-Object { $_ -notmatch '^[a-fA-F0-9]{64}$' }).Count) { throw 'CliApprovedSHA256 必须是按清单顺序的四个 SHA256。' }
@@ -65,7 +71,7 @@ try {
     Save-Result
     Assert-Closed
     if ($Action -eq 'Update') {
-        if (-not $PackagePath -and -not $CliApprovedSHA256) { throw 'Update 至少要提供 Desktop 安装包（PackagePath + ApprovedSHA256）或 CliApprovedSHA256。' }
+        if (-not $PackagePath -and -not $CliApprovedSHA256 -and -not $PluginApprovedSHA256) { throw 'Update 至少要提供 Desktop 安装包（PackagePath + ApprovedSHA256）、CliApprovedSHA256 或 PluginApprovedSHA256。' }
         if ($PackagePath) {
             if ($ApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw '更新前必须提供已审核的官方 MSIX 路径和 ApprovedSHA256；先用 下载ClaudeDesktop官方包.ps1 下载并审核。' }
             $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
@@ -84,7 +90,7 @@ try {
         if (-not $admin -or -not $ExpectedUserSid -or $ExpectedUserSid -ne $sid) { throw '管理员工作进程的用户身份不符；不能改用其他管理员账户或重复提权。' }
     } elseif (-not $admin) {
         $command = '& ' + (Quote-Literal $entry) + ' -Worker -Action ' + (Quote-Literal $Action) + ' -ResultDirectory ' + (Quote-Literal $ResultDirectory) + ' -ExpectedUserSid ' + (Quote-Literal $sid)
-        foreach ($item in @{PackagePath=$PackagePath;ApprovedSHA256=$ApprovedSHA256;ResumeJournal=$ResumeJournal}.GetEnumerator()) {
+        foreach ($item in @{PackagePath=$PackagePath;ApprovedSHA256=$ApprovedSHA256;ResumeJournal=$ResumeJournal;PluginApprovedSHA256=$PluginApprovedSHA256}.GetEnumerator()) {
             if ($item.Value) { $command += ' -' + $item.Key + ' ' + (Quote-Literal $item.Value) }
         }
         if ($CliApprovedSHA256) { $command += ' -CliApprovedSHA256 ' + ((@($CliApprovedSHA256) | ForEach-Object { Quote-Literal $_ }) -join ',') }
@@ -117,6 +123,10 @@ try {
     if ($packages.Count -ne 1) { throw '当前用户 Claude 安装包不唯一或不存在。' }
     $result.Version = [string]$packages[0].Version
     $updater = Join-Path $source '更新ClaudeDesktop.ps1'
+    if ($Action -eq 'Update' -and $PluginApprovedSHA256) {
+        # 插件换目录必须最先做：之后的 CLI 刷新要按清单路径逐个读文件，旧插件目录可能已被 VS Code 清掉。
+        $null = Run-Step '插件路径迁移' (Join-Path $source '应用直连防护管理.ps1') @('-Action','MigratePlugin','-ApprovedSHA256',$PluginApprovedSHA256)
+    }
     if ($Action -eq 'Update' -and $CliApprovedSHA256) {
         # 必须在 Desktop 迁移前刷新：Refresh 要求清单版本等于已装 Desktop，Apply 要求清单指纹等于磁盘文件。
         $refreshCommand = '& ' + (Quote-Literal (Join-Path $source '应用直连防护管理.ps1')) + ' -Action Refresh -SkipNetworkProbe -ApprovedSHA256 ' + ((@($CliApprovedSHA256) | ForEach-Object { Quote-Literal $_ }) -join ',')
