@@ -134,6 +134,19 @@ if ($Worker) {
                     if ($o.PackageVersion) { $pkgVer = [string]$o.PackageVersion }
                 }
                 catch { }
+                # Verify.json 是 Docs 与 Skill 必须一致的文件之一：在项目里时把通过的新记录同步回 Docs，
+                # 只在两边清单完全相同时同步；清单不同说明有一边没跟上，保留差异让总检暴露。
+                if ($deskStatus -eq 'passed') {
+                    $dir = [IO.DirectoryInfo]$root
+                    while ($null -ne $dir -and -not (Test-Path -LiteralPath (Join-Path $dir.FullName 'docs\配置\Claude环境\Desktop防护'))) { $dir = $dir.Parent }
+                    if ($null -ne $dir) {
+                        $docs = Join-Path $dir.FullName 'docs\配置\Claude环境\Desktop防护'
+                        $docsManifest = Join-Path $docs '应用过滤目标.json'
+                        if ((Test-Path -LiteralPath $docsManifest) -and (Get-FileHash -LiteralPath $docsManifest).Hash -eq (Get-FileHash -LiteralPath $manifestPath).Hash) {
+                            try { Copy-Item -LiteralPath $vj -Destination (Join-Path $docs '应用直连防护-Verify.json') -Force } catch { }
+                        }
+                    }
+                }
             }
         }
     }
