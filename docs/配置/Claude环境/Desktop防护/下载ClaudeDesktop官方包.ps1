@@ -1,9 +1,11 @@
 #requires -Version 7.0
-# 下载并审核 Claude Desktop 官方 MSIX；只下载和只读审核，不提权、不安装、不启动 Claude。
-# 输出 JSON：已是最新时 Status=up_to_date；否则 Status=downloaded，并给出下一步一键更新所需的 PackagePath 与 SHA256。
+# 查询或下载并审核 Claude Desktop 官方 MSIX；不提权、不安装、不启动 Claude。
+# -CheckOnly：只向官方入口查最新版本号并与已装版本比较，不建目录、不下载；Status=up_to_date 或 update_available。
+# 不带 -CheckOnly：已是最新时 Status=up_to_date；否则下载并审核，Status=downloaded，给出一键更新所需的 PackagePath 与 SHA256。
 [CmdletBinding()]
 param(
-    [string]$Proxy = 'http://127.0.0.1:43867'
+    [string]$Proxy = 'http://127.0.0.1:43867',
+    [switch]$CheckOnly
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -46,6 +48,13 @@ try {
     if ($urlVersion -and [version]$urlVersion -eq [version]$result.InstalledVersion) {
         $result.LatestVersion = $urlVersion
         $result.Status = 'up_to_date'
+        $result | ConvertTo-Json -Depth 8
+        exit 0
+    }
+    if ($CheckOnly) {
+        if (-not $urlVersion) { throw ('跳转地址里没有版本号，无法只查不下：' + $downloadUri.AbsolutePath) }
+        $result.LatestVersion = $urlVersion
+        $result.Status = 'update_available'
         $result | ConvertTo-Json -Depth 8
         exit 0
     }

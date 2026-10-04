@@ -11,7 +11,8 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 | 用户意图 | 动作 |
 |---|---|
-| 看看能否更新、检查状态 | 只读：跑下载脚本（已是最新不下载）、`npm view`、`一键更新 -Action Verify` |
+| 需不需要更新、看看能否更新 | 只查不下：跑 `Desktop防护/查询Claude最新版本.ps1`，向官网查三个产品最新版并与本机比较，报告谁落后；不下载、不跑下载脚本 |
+| 检查防护状态 | `一键更新ClaudeDesktop.ps1 -Action Verify`（需要 UAC，先告知用户） |
 | 更新 Desktop / CLI | 按下面「更新流程」 |
 | 更新 VS Code 插件 | 单独处理，不顺带更新 npm CLI |
 | 已手动更新，请同步 | 跳过安装，从流程第 3 步开始 |
@@ -22,7 +23,7 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 | 由脚本完成（不要手工重做、不要重新搜索） | 由 Agent 判断 |
 |---|---|
-| 识别系统与架构、查最新版、下载、签名与 Manifest 审核：`下载ClaudeDesktop官方包.ps1` | 现场是否适合更新：Claude 进程、策略、上次失败的遗留 |
+| 只查三个产品是否落后：`查询Claude最新版本.ps1`；下载与签名、Manifest 审核：`下载ClaudeDesktop官方包.ps1`（`-CheckOnly` 只查 Desktop） | 现场是否适合更新：Claude 进程、策略、上次失败的遗留 |
 | 规则迁移、CLI 指纹刷新、Verify、总检、Skill 副本同步、清理安装包：`一键更新ClaudeDesktop.ps1` | 审核 CLI 新文件的指纹和签名，决定是否批准 |
 | 过期备份与遗留安装包的清单：`清理维护残留.ps1` | 把清理清单列给用户，得到确认后再删除 |
 | 程序与代理检查：`Claude环境一键总检.ps1`、启动器 `-CheckOnly` | 脚本报错时读日志定位原因，按维护说明恢复，不重跑碰运气 |
@@ -41,6 +42,7 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 | 路径里的 `win32` | 是 Windows 平台名（沿用 Node.js 的叫法），不代表 32 位；位数看后面的架构段 `x64` / `arm64` |
 | CLI 包名与位置 | `@anthropic-ai/claude-code`，npm 全局安装，前缀 `%APPDATA%\npm` |
 | CLI 查最新版 | `npm view @anthropic-ai/claude-code version --registry https://registry.npmjs.org` |
+| 插件查最新版 | VS Code 官方市场 `https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery`，按 `anthropic.claude-code` 查，只取 `win32-x64`；本机版本以 `~/.vscode/extensions/extensions.json` 当前登记为准 |
 | CLI 安装 | `npm install -g @anthropic-ai/claude-code@<版本> --registry https://registry.npmjs.org`；本机默认源若是国内镜像（如 `registry.npmmirror.com`）也不用；不用 `npm update -g` |
 | 受保护的四个程序 | 以 `Desktop防护/应用过滤目标.json` 的 `Targets` 顺序为准：Desktop `claude.exe`、CLI `bin\claude.exe`、CLI 原生包 `claude-code-win32-x64\claude.exe`、VS Code 插件 `resources\native-binary\claude.exe` |
 | 证据与备份 | `%LOCALAPPDATA%\ClaudeNetworkGuard\`；Codex 桌面版（MSIX 打包应用）写的内容实际在 `%LOCALAPPDATA%\Packages\OpenAI.Codex_<发布者哈希>\LocalCache\Local\ClaudeNetworkGuard\` |
@@ -49,7 +51,7 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 ## 更新流程
 
 1. **确认现场**：读版本（从包元数据读，不启动 Claude）、Claude 进程、HKLM `disableAutoUpdates=1` 与同层 `egressProxyUrl`、CLI 的 `DISABLE_AUTOUPDATER=1`。缺失或冲突先报告，不顺带改用户设置；不输出认证文件或密钥。发现 Claude 正在运行就停止安装，不强杀，也不在 Claude Code 会话里更新自身，交给退出后的 Codex 或独立维护进程执行。
-2. **准备**：普通权限运行 `下载ClaudeDesktop官方包.ps1`，`Status=up_to_date` 表示 Desktop 不用更新；需要更新 CLI 时，按固定来源表查版本并安装指定版本。
+2. **准备**：先跑 `查询Claude最新版本.ps1` 确认谁落后；Desktop 落后且用户要更新时，普通权限运行 `下载ClaudeDesktop官方包.ps1` 下载并审核；需要更新 CLI 时，按固定来源表查版本并安装指定版本。
 3. **审核**：按 `Targets` 顺序读取四个程序的 SHA256 和 Anthropic 签名，逐个核对；不能直接从磁盘取指纹就批准。
 4. **执行（只弹一次 UAC）**：`一键更新ClaudeDesktop.ps1 -Action Update`，传 `-PackagePath` 和 `-ApprovedSHA256`（Desktop 有新版时），以及 `-CliApprovedSHA256 '<h1>','<h2>','<h3>','<h4>'`（CLI 或插件同路径文件变化时）。工作进程依次完成指纹刷新、Desktop 迁移、Verify、总检、启动条件检查、Skill 副本同步、安装包清理，结果写入 `统一维护-*\结果.json`。不要再单独以管理员身份跑 `应用直连防护管理.ps1 -Action Refresh`。
 5. **失败时**：停下后续步骤，保留防护、日志和安装包，按 `Desktop防护/更新维护说明.md` 区分注册前、注册后，用 `-ResumeJournal` 续接。没有旧安装包就不承诺降级。

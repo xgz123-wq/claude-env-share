@@ -329,11 +329,11 @@ if (-not (Test-Path -LiteralPath $rangeCheck)) {
   }
 }
 
-# 网页最终验收：不再标 MANUAL，而是真实去 ping0.cc / ip.net.coffee 渲染取数后判定。
-# ippure.com 需要混淆 JS 现算的 x-t 签名头，无头拿不到，所以它是这套闭环里唯一「建议人眼」的一站，
-# 但不再阻塞结论 —— 另外三站（含第 7 层的 iprisk.top）已经全部自动。
+# 检测站自动读数：真实去 ping0.cc / ip.net.coffee 渲染取数后判定（iprisk.top 在第 7 层，ippure.com 无头拿不到）。
+# 它只看出口 IP 读数，不代表专用 Chrome / Desktop 里登录、DNS、WebRTC、IPv6、语言和时区都正常，所以网页验收仍是人工项。
 $web = Get-WebAcceptanceVerdict
-Add-Result $web.Status '网页最终验收' $web.Evidence
+Add-Result $web.Status '检测站自动读数' $web.Evidence
+Add-Result MANUAL '网页最终验收' '专用 Chrome / Desktop 内置浏览器分别确认：Claude IP、DNS、WebRTC、IPv6、语言和时区全绿'
 
 if ($Json) {
   # 给上层编排器（Invoke-ClaudeSafetyCheck.ps1）消费的机器可读输出
@@ -374,7 +374,7 @@ if ($failCount -gt 0) {
 if ($warnCount -gt 0) {
   Write-Host "结论：日常运行检查通过；有 $warnCount 个防护提醒，不能把它们当成已验收。" -ForegroundColor Yellow
 } else {
-  Write-Host '结论：程序层与网页层检查全部通过，可以进入日常使用。' -ForegroundColor Green
+  Write-Host '结论：程序层检查全部通过；网页全绿后可进入日常使用。' -ForegroundColor Green
 }
 
 if ($OpenBrowser) {

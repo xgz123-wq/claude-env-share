@@ -29,6 +29,12 @@ function Invoke-Probe([string]$Executable) {
  if($LASTEXITCODE -ne 0){throw '独立测试程序执行失败。'}
  return ($probeOutput|ConvertFrom-Json)
 }
+function Resolve-ControlProbe {
+ # 对照程序：PATH 里第一个不是测试探针的 node.exe，证明未受保护的程序不受影响；不写死本机安装位置。
+ $found=@(Get-Command node.exe -CommandType Application -All -ErrorAction SilentlyContinue|ForEach-Object Source|Where-Object {$_ -and $_ -ine $probePath})
+ if($found.Count -eq 0){throw '找不到对照用的 node.exe：请确认 Node.js 已安装并在 PATH 中。'}
+ return $found[0]
+}
 function Test-Guard {
  Assert-Closed
  if(-not(Test-Path -LiteralPath $probePath)){throw '独立测试程序不存在。'}
@@ -39,7 +45,7 @@ function Test-Guard {
   $record.Test.Filters=Select-Filter ([ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Add($probePath,$probe4,$probe6,$true))
   # Add 返回前已关闭其 WFP 会话；这里测试持久规则不依赖安装程序常驻。
   $record.Test.Protected=Invoke-Probe $probePath
-  $record.Test.Control=Invoke-Probe 'D:\Program Files\nodejs\node.exe'
+  $record.Test.Control=Invoke-Probe (Resolve-ControlProbe)
  } finally {
   $record.Test.Removed=[ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Remove($probe4,$probe6)
  }

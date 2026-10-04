@@ -48,7 +48,7 @@ claude-safe-network/                      ← 整个目录可拷贝，零外部�
 ├── scripts/
 │   ├── Common.ps1                         ★ 套件基石：真源加载 + 输出渲染 + 网络/子进程工具 + JSON 交接
 │   ├── Invoke-ClaudeSafetyCheck.ps1       ★ 9 层编排器（一键跑全部，支持 -Fast / -Only / -Json）
-│   ├── Claude环境一键总检.ps1               ★ 人工验收主入口（含 Anthropic 网段规则与网页最终验收）
+│   ├── Claude环境一键总检.ps1               ★ 人工验收主入口（含 Anthropic 网段规则、检测站自动读数，网页最终验收为 MANUAL）
 │   ├── checks/     Check-ProxyStack / ClaudeCodeConfig / ChromeEntry / DesktopConfig
 │   │               WindowsFallback / PortConsistency / IpReputation / ClaudeIp / SuiteIntegrity
 │   ├── clash/      Clash全局账号通道.js（全局扩展脚本权威副本）+ 验证 / 五项自检
@@ -61,7 +61,7 @@ claude-safe-network/                      ← 整个目录可拷贝，零外部�
 │   ├── ico/Claude官方图标.ico
 │   └── shortcuts/*.lnk                    5 个快捷方式原版备份（= 原始基线，指回 docs\配置\；**还原源，勿改**）
 └── references/
-    ├── 00-baseline.md                     冻结基线快照（实测数据 + 诚实记录的待办）
+    ├── 00-baseline.md                     本机基线待填模板（历史数值不入档）
     ├── 01-架构与配置主体.md                Script.js 六步逻辑、注册表 / WFP / configLibrary 细节
     ├── 02-验收与排查手册.md                验证工具、故障决策树、环境与编码坑
     ├── 03-变更与回滚SOP.md                 换订阅 / Desktop 升级 / 改端口 / 桌面快捷方式校验与还原 / 回滚
@@ -75,7 +75,7 @@ claude-safe-network/                      ← 整个目录可拷贝，零外部�
 # ① 一键全检（9 层，约 40s，含联网）
 pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1
 
-# ② 快查（跳过联网层 proxy / chrome / ip / claudeip，只剩本机配置层，约 10s）
+# ② 快查（跳过联网层 proxy / chrome / ip / claudeip，只剩本机配置层，约 10s；不弹 UAC，提权缓存不匹配只报 WARN）
 pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1 -Fast
 
 # ③ 只跑某几层
@@ -113,15 +113,14 @@ pwsh -File scripts\apply\启用-PowerShell7入口.ps1 -Rollback
 
 **层名**：`proxy` / `code` / `chrome` / `desktop` / `windows` / `ports` / `ip` / `claudeip` / `suite`
 
-**健康基线**（2026-09-13 实测锁定）：全量 `114 PASS / 2 WARN / 0 FAIL / 0 MANUAL`（80s，exit 0）；
-`-Fast`（跳过 4 个联网层）`61 PASS / 0 WARN / 0 FAIL / 0 MANUAL`（16s，exit 0）。
-`ping0.cc` 未被限流时全量为 `119 PASS / 1 WARN / 0 FAIL / 0 MANUAL`。**计数里已无 `MANUAL`。**
+**健康判定**：现行判定以脚本实时输出为准：`0 FAIL`、退出码 `0` 即通过，`WARN` 逐条确认。
+历史参考（2026-09-13 实测，后来检查项有增加，不作为现行验收线）：全量 `114 PASS / 2 WARN / 0 FAIL / 0 MANUAL`，`-Fast` `61 PASS / 0 WARN / 0 FAIL / 0 MANUAL`。
 
 2 条 `WARN` 都是良性/可自愈：iprisk「IP 使用时间较短」（新 IP 必然扣分）、
 `ping0.cc` 被 Cloudflare Turnstile 挑战页拦下（**站点按出口 IP 临时限流**，与本机配置无关；隔一会儿再跑即恢复）。
-WFP 实盘核对已降级为 `pwsh -File scripts\checks\Request-ElevatedVerify.ps1 -Refresh` + 点一次 UAC，结果缓存 **30 天**，
+WFP 实盘核对已降级为 `pwsh -File scripts\checks\Request-ElevatedVerify.ps1 -Refresh` + 点一次 UAC，结果缓存 **30 天**（`-Fast` 永不自动弹 UAC），
 过期或版本不匹配会降级成 `WARN`（**绝不静默放行**）。四个检测站里 `ping0.cc` / `iprisk.top` / `ip.net.coffee`
-已用无头 Chrome 真实渲染自动判定，只剩 `ippure.com` 需人眼（接口要混淆 JS 现算的 `x-t` 签名头）。
+已用无头 Chrome 真实渲染自动读数（总检里叫「检测站自动读数」），只看出口 IP；专用 Chrome / Desktop 的网页最终验收仍由用户人眼确认，`ippure.com` 也只能人眼看。
 
 ## 能力一：配置核对（闭环清单）
 
@@ -183,9 +182,9 @@ WFP 实盘核对已降级为 `pwsh -File scripts\checks\Request-ElevatedVerify.p
 | ✅ 新代码零硬编码 | 编排器、9 个 checks、`Repair-Shortcuts.ps1` 全部从 `config\Topology.psd1` 取端口 / 组名 / 阈值 |
 | ✅ 主入口已改为取真源 | `Claude环境一键总检.ps1` 的 `$portMixed/$portChrome/$portDesktop` 来自真源 |
 | ✅ 漂移检测 | `Check-PortConsistency.ps1` 扫同族端口号（`438xx`/`789x`/`909x`/`1080x`），**凡不在真源里的报 WARN** |
-| ⚠️ **保留** | **18 个 legacy 文件 / 56 行端口字面量**（多为一次性已执行完的安装/回滚脚本）**未改动** |
+| ⚠️ **保留** | **legacy 端口字面量**（多为一次性已执行完的安装/回滚脚本）**未改动**；文件和行数以 `Check-PortConsistency.ps1 -Json` 实时输出为准 |
 
-**为什么不全改**：那 56 行散落在 18 个文件里，改动风险大于收益。折中方案 = **真源 + 清单 + 告警**：
+**为什么不全改**：这些字面量散落在多个旧文件里，改动风险大于收益。折中方案 = **真源 + 清单 + 告警**：
 真源只有一处，`Check-PortConsistency.ps1` 能直接输出「文件:行号」清单，改端口时照单同步即可（见 SOP-3）。
 
 ## 标准工作流
@@ -196,8 +195,8 @@ WFP 实盘核对已降级为 `pwsh -File scripts\checks\Request-ElevatedVerify.p
 pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1
 ```
 
-期望 `114 PASS / 2 WARN / 0 FAIL / 0 MANUAL`（`ping0.cc` 未被限流时 `119 / 1 / 0 / 0`），退出码 0。
-有 FAIL → 按 [02-验收与排查手册.md](./references/02-验收与排查手册.md) 的决策树走；有 WARN → 逐条确认（见上方健康基线里的两条良性 WARN）。
+现行判定以脚本实时输出为准：`0 FAIL`、退出码 `0` 即通过，`WARN` 逐条确认。
+有 FAIL → 按 [02-验收与排查手册.md](./references/02-验收与排查手册.md) 的决策树走；有 WARN → 逐条确认（常见良性 WARN 见上方）。
 要人工验收再加跑 `Claude环境一键总检.ps1 -OpenBrowser`。
 
 ### 场景 B：导入新订阅后复核
@@ -240,7 +239,7 @@ pwsh -File scripts\apply\Repair-Shortcuts.ps1 -Apply    # 写入：从原版备�
 
 本套件做的三层保障：
 
-1. **全部 28 个 `.ps1` 首行都有 `#requires -Version 7.0`** → 被 5.1 跑到会当场明确拒绝，而不是按 GBK 解析中文后抛乱码错。
+1. **全部 `.ps1` 首行都有 `#requires -Version 7.0`** → 被 5.1 跑到会当场明确拒绝，而不是按 GBK 解析中文后抛乱码错。
 2. **第 9 层会静态扫描**：任何脚本里若残留 `powershell.exe` 调用 → `FAIL`；`#requires` 覆盖不全 → `WARN`。
 3. **可选加固：`.ps1` 右键「用 PowerShell 7 运行」**（只写 `HKCU`，不改系统关联、不需要管理员）：
 
@@ -257,7 +256,7 @@ pwsh -File scripts\apply\启用-PowerShell7入口.ps1 -Rollback  # 撤销
 | 文件 | 内容 |
 |---|---|
 | [README.md](./README.md) | **给读者看的入口**：定位 / 适用条件 / 快速开始 / 闭环层次 / 已知限制（人先看这份） |
-| [references/00-baseline.md](./references/00-baseline.md) | 2026-09-13 冻结基线快照（实测数据 + 诚实记录的待办） |
+| [references/00-baseline.md](./references/00-baseline.md) | 本机基线待填模板（历史数值见维护日志） |
 | [references/01-架构与配置主体.md](./references/01-架构与配置主体.md) | `Script.js` 六步逻辑、`profiles.yaml` 结构、注册表 / WFP / configLibrary 细节 |
 | [references/02-验收与排查手册.md](./references/02-验收与排查手册.md) | 四大 IP 信誉站、四套验证工具、故障决策树、环境与编码坑 |
 | [references/03-变更与回滚SOP.md](./references/03-变更与回滚SOP.md) | 换订阅 / Desktop 升级 / 改端口或组名 / 校验与还原桌面快捷方式 / 回滚 |

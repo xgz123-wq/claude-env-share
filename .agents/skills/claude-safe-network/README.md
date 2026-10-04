@@ -72,14 +72,14 @@
 - **残留风险**：Node 侧独立 DNS 调用不在 WFP 精确规则覆盖内，只靠 TUN + 53 劫持兜底。
 - **订阅补丁**：某订阅里的 `delete: - DOMAIN-SUFFIX,gov,DIRECT` 针对当前订阅，换订阅后要复核。
 - **未验证**：`egressProxyUrl` 是否支持 `socks5://`，官方文档未写明。
-- **端口字面量**：18 个旧文件 / 56 行端口仍是硬编码（多为一次性脚本），改端口时用 `Check-PortConsistency.ps1 -Json` 出清单照单同步。
+- **端口字面量**：部分旧文件端口仍是硬编码（多为一次性脚本），改端口时用 `Check-PortConsistency.ps1 -Json` 出清单照单同步。
 
 ## 文档索引
 
 | 文件 | 什么时候看 |
 |---|---|
 | [SKILL.md](./SKILL.md) | 命令、红线、误判坑、场景 A–G 工作流 |
-| [references/00-baseline.md](./references/00-baseline.md) | 2026-09-13 基线快照（已过时，只供对照） |
+| [references/00-baseline.md](./references/00-baseline.md) | 本机基线待填模板（历史数值见维护日志） |
 | [references/01-架构与配置主体.md](./references/01-架构与配置主体.md) | `Script.js` 改了什么、WFP / 注册表 / configLibrary 细节 |
 | [references/02-验收与排查手册.md](./references/02-验收与排查手册.md) | 出问题了，按故障决策树查 |
 | [references/03-变更与回滚SOP.md](./references/03-变更与回滚SOP.md) | 要动配置（换订阅、Desktop 升级、改端口、快捷方式、回滚） |

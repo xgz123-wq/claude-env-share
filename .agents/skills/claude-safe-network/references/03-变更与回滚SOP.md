@@ -24,7 +24,7 @@
 | 步 | 做什么 | 期望 | 不通过怎么办 |
 |---|---|---|---|
 | 1 | **在 `ACCOUNT-US` 组里手动挑一个节点** | 组非空、已选中 | 自动填充**不会自动选中**。若组为空 → 新订阅没有可用节点，换订阅 |
-| 2 | **跑 9 层一键全检**（pwsh 7） | `114 PASS / 2 WARN / 0 FAIL / 0 MANUAL`，退出码 `0` | 有 FAIL 按 `02-验收与排查手册.md` 决策树查 |
+| 2 | **跑 9 层一键全检**（pwsh 7） | `0 FAIL`，退出码 `0`；WARN 逐条确认 | 有 FAIL 按 `02-验收与排查手册.md` 决策树查 |
 | 3 | **跑 IP 检测两个脚本**：`checks\Check-IpReputation.ps1` + `checks\Check-ClaudeIp.ps1` | 见 `04-Ip信誉检测.md` 合格线 | 命中机房/黑名单 → 换节点或换订阅 |
 | 4 | **人工看 `ippure.com`** 确认新出口（唯一仍需人眼的站） | 页面 IP 与脚本一致 | 不一致 → 说明某个入口没走 `ACCOUNT-US` |
 | 5 | **复核 per-profile 的 `delete: DOMAIN-SUFFIX,gov,DIRECT`** | 目标在新订阅里仍存在 | 不存在 → 删掉这行（无害但不干净） |
@@ -83,7 +83,7 @@ Desktop 已从 `1.49585` 升到 `1.52386.3.0`，过程中 WFP 规则**已发生 
 端口 / 组名的**唯一真源**是 `config\Topology.psd1` 的 `Ports` / `Groups`。
 编排器、9 个 checks、`Repair-Shortcuts.ps1` 都从这里取，改真源即对它们生效。
 
-但仍有 **legacy 字面量**需要手工同步（当前 **18 个文件 / 56 行**）：
+但仍有 **legacy 字面量**需要手工同步（文件和行数以 `Check-PortConsistency.ps1 -Json` 实时输出为准）：
 
 | 类别 | 说明 |
 |---|---|
@@ -113,7 +113,7 @@ Desktop 已从 `1.49585` 升到 `1.52386.3.0`，过程中 WFP 规则**已发生 
 
 ### 为什么不全改成读真源
 
-那 56 行散落 18 个文件，风险大于收益（很多是一次性已执行完的脚本）。
+这些字面量散落在多个旧文件里，风险大于收益（很多是一次性已执行完的脚本）。
 折中方案 = **真源 + 清单 + 漂移告警**，如实记录，不假装全自动。
 
 ## SOP-3B 桌面快捷方式：校验与还原（**不接管**）
@@ -246,9 +246,9 @@ pwsh -File scripts\checks\Request-ElevatedVerify.ps1 -Status
    ```powershell
    pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1
    ```
-   期望 `114 PASS / 2 WARN / 0 FAIL / 0 MANUAL`，退出码 `0`。（快查加 `-Fast` = `61 / 0 / 0 / 0`；只想某项加 `-Only proxy,desktop`）
+   期望 `0 FAIL`、退出码 `0`，WARN 逐条确认。（快查加 `-Fast`，不弹 UAC；只想某项加 `-Only proxy,desktop`）
    若 `ping0.cc` **没**被网站风控挑战页拦下（正常情况下是通的），L7 会多出 5 条 PASS、少 1 条 WARN，基线变 `119 / 1 / 0 / 0`（120 行）——
-   这说明站点此刻没限流，是更好的结果。反过来，短时间内反复自动跑会触发它的挑战页，L7 从 12 行降为 8 行，基线退回 `114 / 2 / 0 / 0`。
+   这说明站点此刻没限流，是更好的结果。反过来，短时间内反复自动跑会触发它的挑战页，L7 从 12 行降为 8 行，多出一条 WARN。
    注意：**正常情况下结果行里不会出现 `MANUAL`**。只有 WFP 提权缓存过期且当前会话无法弹 UAC 时，L5/L4 才会降级为 `WARN`（不会 `FAIL`），
    此时跑 `pwsh -File scripts\checks\Request-ElevatedVerify.ps1 -Refresh` 点一次 UAC 即可恢复（实测约 9 秒，管 30 天）。
 2. 跑 **人工验收主入口**（期望 14 项全 PASS）：

@@ -23,6 +23,7 @@
 
 .PARAMETER Fast
     跳过需要联网的四层（proxy 的三入口探测、ip、claudeip），只做本机配置核对（code / desktop / windows / ports / suite）。
+    不弹 UAC、不写提权缓存；管理员实盘复核单独跑 scripts\checks\Request-ElevatedVerify.ps1 -Refresh。
 
 .PARAMETER OpenBrowser
     把浏览器人工核验项直接打开到专用 Chrome。
@@ -66,7 +67,11 @@ $layers = @(
 )
 
 $selected = if ($Only) { @($layers | Where-Object { $Only -contains $_.Key }) } else { $layers }
-if ($Fast) { $selected = @($selected | Where-Object { -not $_.Net }) }
+if ($Fast) {
+    $selected = @($selected | Where-Object { -not $_.Net })
+    # 快查永不弹 UAC：子进程继承这个变量，缓存缺失、过期或不匹配时只报 WARN 并给出手动刷新命令。
+    $env:CLAUDE_SAFE_NO_ELEVATE = '1'
+}
 if ($selected.Count -eq 0) { throw "没有匹配的层。可用层名：$(($layers.Key) -join ', ')" }
 
 Write-Banner 'Claude 安全出口链路 · 全层编排检查' "共 $($selected.Count) 层；每层独立运行，失败不影响后续层"

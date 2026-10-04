@@ -537,7 +537,7 @@ function Test-CoffeeClean {
     return [pscustomobject]@{ Signals = $sig; Dirty = $dirty; Text = ($sig -join ' / ') }
 }
 
-# 「网页最终验收」的自动判定。
+# 「检测站自动读数」的自动判定（不替代人工网页验收）。
 # 四个检测站里 iprisk.top 已在第 7 层自动取，ping0.cc / ip.net.coffee 这里真实渲染；
 # 只剩 ippure.com 需要人眼 —— 它的数据接口要一个混淆 JS 现算的 x-t 签名头，无头拿不到。
 # 判定原则：站点取不到数只报 WARN（不 FAIL），因为那多半是站点对我们自己高频访问的临时限流，

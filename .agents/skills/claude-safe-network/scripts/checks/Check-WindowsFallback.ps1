@@ -190,6 +190,7 @@ if (Test-Path $statePath) {
 
     # 缓存新鲜就直接用；缺失或过期就当场发起一次 UAC（见 Common.ps1 的 Update-ElevatedVerifyCache）。
     # 已经在管理员上下文时它不会弹窗，直接干活。用户要做的只有那一下「是」。
+    # -Fast 会设 CLAUDE_SAFE_NO_ELEVATE，此时一律不弹窗，只报 WARN。
     $manifestHash = if (Test-Path -LiteralPath $manifestPath) { (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash } else { '' }
     $expectedKeySet = @($expectedKeys | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object)
     $cacheBefore = Read-ElevatedVerifyCache
@@ -216,7 +217,12 @@ if (Test-Path $statePath) {
             [string]$wfpCache.ManifestSHA256 -ne $manifestHash -or
             [string]$wfpCache.PkgVersion -ne [string]$man.PackageVersion -or
             ((@($wfpCache.WfpKeys | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object) -join '|') -cne ($expectedKeySet -join '|'))) {
-        Add-CheckResult -Status 'FAIL' -Item 'WFP 实盘核对' -Evidence '提权缓存与当前清单哈希、Desktop 版本或规则 GUID 不一致；必须重新提权核对'
+        # 没真正复核过（-Fast 跳过或 UAC 被取消）只能说“未核对”，不能判失败；复核过仍不一致才是 FAIL。
+        if ($elev.Refreshed -and -not $elev.Error) {
+            Add-CheckResult -Status 'FAIL' -Item 'WFP 实盘核对' -Evidence '提权复核后缓存仍与当前清单哈希、Desktop 版本或规则 GUID 不一致'
+        } else {
+            Add-CheckResult -Status 'WARN' -Item 'WFP 实盘核对' -Evidence ("防护清单已变更，提权缓存还是旧清单的$skip；跑 $refreshHint 点一次「是」重新核对")
+        }
     }
     elseif ($wfpCache.WfpPassed) {
         $detail['wfp'] = @($wfpCache.WfpDetail)
