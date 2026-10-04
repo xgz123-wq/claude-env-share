@@ -34,9 +34,16 @@ foreach ($directory in @((Join-Path $env:ProgramData 'ClaudeNetworkGuard')) + @(
         $candidates += [pscustomobject]@{Path=$_.FullName;Files=1;KB=[math]::Round($_.Length/1KB)}
     }
 }
+# 在 Codex 等 MSIX 应用里，普通根是合并视图，会把 Packages 下同一目录再列一次；按“去掉根目录后的相对路径”去重。
+$candidates = @($candidates | Group-Object {
+    $key = $_.Path
+    foreach ($root in $roots) { if ($key.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { $key = '<root>' + $key.Substring($root.Length); break } }
+    $key
+} | ForEach-Object { $_.Group[0] })
 $report = [ordered]@{At=(Get-Date -Format o);Mode=$(if($Yes){'delete'}else{'dry-run'});KeepDays=$KeepDays;Count=$candidates.Count;TotalMB=[math]::Round((($candidates | Measure-Object KB -Sum).Sum)/1KB,1);Items=$candidates;Errors=@()}
 if ($Yes) {
     foreach ($candidate in $candidates) {
+        if (-not (Test-Path -LiteralPath $candidate.Path)) { continue }
         try { Remove-Item -LiteralPath $candidate.Path -Recurse -Force }
         catch { $report.Errors += ($candidate.Path + '：' + $_.Exception.Message) }
     }
