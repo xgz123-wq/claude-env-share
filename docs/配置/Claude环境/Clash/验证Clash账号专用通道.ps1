@@ -98,8 +98,13 @@ $validation = @(& $core -t -d $base -f $runtime 2>&1)
 $validationExit = $LASTEXITCODE
 $socksIp = curl.exe --silent --show-error --max-time 20 --socks5-hostname 127.0.0.1:43866 https://api.ipify.org
 $socksExit = $LASTEXITCODE
-$claudeStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --socks5-hostname 127.0.0.1:43866 https://claude.ai/
-$claudeExit = $LASTEXITCODE
+# TUN 空闲后第一个 SOCKS 连接握手偏慢，单次 20 秒超时会产生假失败，故重试一次。
+for ($attempt = 1; $attempt -le 2; $attempt++) {
+  $claudeStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --socks5-hostname 127.0.0.1:43866 https://claude.ai/
+  $claudeExit = $LASTEXITCODE
+  if ($claudeExit -eq 0 -and $claudeStatus -ne '000') { break }
+  if ($attempt -eq 1) { Start-Sleep -Seconds 3 }
+}
 $feishuStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --noproxy '*' https://www.feishu.cn/
 $feishuExit = $LASTEXITCODE
 $proxyEnabled = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -Name ProxyEnable -ErrorAction SilentlyContinue).ProxyEnable

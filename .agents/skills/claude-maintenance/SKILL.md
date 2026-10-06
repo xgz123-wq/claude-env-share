@@ -7,15 +7,29 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 本文件是维护 SOP 的唯一正文；由本文件向上三级定位项目根目录，根目录缺少 `docs/配置/Claude环境/` 就停止。路径均相对项目根，脚本一律用 PowerShell 7。Docs 是活动源，Skill 里的脚本副本只做同步。
 
+## 快速流程（默认走这条）
+
+只跑两条命令就能完成三端更新，不要读脚本源码，也不要为找参数去通读别的文档：
+
+1. `docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1 -Action Plan`
+   一次输出三端版本对比、四个受保护目标的指纹，以及唯一需要执行的那条命令（结果里的 `Command` 字段）；有 claude 进程在跑就报 `blocked_running`，先请用户退出再重跑。
+2. 用 `Command` 字段的值执行（PowerShell 7，全程只弹一次 UAC）。成功看 `Status=passed`，明细在 `Maintenance` 给出的 `ResultPath`。
+
+用户已明确要求更新、现场也没有 claude 进程时，可直接改用 `-Run`，省掉第 1 步的往返。
+
+**不要做的三件事**：不翻 `更新ClaudeDesktop.ps1`、`应用直连防护管理.ps1` 等源码找参数（脚本输出已含全部字段）；不为“留一份干净通过记录”重跑一次 UAC（首次结果如实写进日志即可）；不重复确认用户已经说过的更新意图。
+
+下面的章节是这套流程背后的依据与例外，只在快速流程报错、或要做非更新类维护时才需要读。
+
 ## 识别用户要做什么
 
 | 用户意图 | 动作 |
 |---|---|
 | 需不需要更新、看看能否更新 | 只查不下：跑 `Desktop防护/查询Claude最新版本.ps1`，向官网查三个产品最新版并与本机比较，报告谁落后；不下载、不跑下载脚本 |
 | 检查防护状态 | `一键更新ClaudeDesktop.ps1 -Action Verify`（需要 UAC，先告知用户） |
-| 更新 Desktop / CLI | 按下面「更新流程」 |
-| 更新 VS Code 插件 | 用户在 VS Code 里装好新版（保持固定版本）后，按「更新流程」用 `-PluginApprovedSHA256` 迁移防护；不顺带更新 npm CLI |
-| 已手动更新，请同步 | 跳过安装，从流程第 3 步开始 |
+| 更新 Desktop / CLI | 按「快速流程」执行 |
+| 更新 VS Code 插件 | 用户在 VS Code 里装好新版（保持固定版本）后走「快速流程」，脚本会自动带上 `-PluginApprovedSHA256` 迁移防护；不顺带更新 npm CLI |
+| 已手动更新，请同步 | 跳过安装，从「快速流程」第 1 步开始 |
 
 “Claude Code Desktop”等含混称呼不等于三个产品全更新；无法确定对象时只问这一项。用户已明确要求更新时不重复确认。UAC 是系统授权，不能承诺零交互。
 
@@ -24,6 +38,7 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 | 由脚本完成（不要手工重做、不要重新搜索） | 由 Agent 判断 |
 |---|---|
 | 只查三个产品是否落后：`查询Claude最新版本.ps1`；下载与签名、Manifest 审核：`下载ClaudeDesktop官方包.ps1`（`-CheckOnly` 只查 Desktop） | 现场是否适合更新：Claude 进程、策略、上次失败的遗留 |
+| 编排上述两步并汇总四个目标的指纹与现成命令：`更新三端Claude.ps1` | 审阅 `Plan` 输出里的指纹与签名，决定是否执行 |
 | 规则迁移、CLI 指纹刷新、Verify、总检、Skill 副本同步、清理安装包：`一键更新ClaudeDesktop.ps1` | 审核 CLI 新文件的指纹和签名，决定是否批准 |
 | 过期备份与遗留安装包的清单：`清理维护残留.ps1` | 把清理清单列给用户，得到确认后再删除 |
 | 程序与代理检查：`Claude环境一键总检.ps1`、启动器 `-CheckOnly` | 脚本报错时读日志定位原因，按维护说明恢复，不重跑碰运气 |
