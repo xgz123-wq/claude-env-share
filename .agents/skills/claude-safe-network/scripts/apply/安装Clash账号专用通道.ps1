@@ -127,13 +127,24 @@ if ($existingListener) {
   throw "端口 $listenerPort 已被 PID $($existingListener.OwningProcess -join ',') 占用。"
 }
 
-$ipEqualResponse = Invoke-MihomoPipe -Method 'GET' -Path '/proxies/IpEqual'
-if ($ipEqualResponse.Status -notmatch '^HTTP/1\.1 200') {
-  throw '无法读取当前 IpEqual 选择，停止安装。'
+$proxiesResponse = Invoke-MihomoPipe -Method 'GET' -Path '/proxies'
+if ($proxiesResponse.Status -notmatch '^HTTP/1\.1 200') {
+  throw '无法读取 Mihomo 代理列表，停止安装。'
 }
-$selectedNode = ($ipEqualResponse.Body | ConvertFrom-Json).now
+$allProxies = ($proxiesResponse.Body | ConvertFrom-Json).proxies
+$proxyNames = @($allProxies.PSObject.Properties.Name)
+# 初始节点：优先用 ACCOUNT-US 已选值，否则退回任意已选策略组（不依赖订阅自带的组名）。
+$selectedNode = $null
+if ($proxyNames -contains 'ACCOUNT-US' -and -not [string]::IsNullOrWhiteSpace($allProxies.'ACCOUNT-US'.now)) {
+  $selectedNode = $allProxies.'ACCOUNT-US'.now
+}
 if ([string]::IsNullOrWhiteSpace($selectedNode)) {
-  throw '当前 IpEqual 没有已选节点，停止安装。'
+  $selectedNode = @($allProxies.PSObject.Properties |
+    Where-Object { $_.Value.now -and $_.Value.type -in @('Selector', 'URLTest', 'Fallback', 'LoadBalance') } |
+    ForEach-Object { $_.Value.now })[0]
+}
+if ([string]::IsNullOrWhiteSpace($selectedNode)) {
+  throw '运行配置里没有任何已选节点，请先在 Clash Verge 里选一个节点再安装。'
 }
 
 New-Item -ItemType Directory -Path $backupDir -Force | Out-Null

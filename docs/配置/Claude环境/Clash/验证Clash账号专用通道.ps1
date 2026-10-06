@@ -117,11 +117,16 @@ $broadTelemetryRulesAbsent = -not @($forbiddenBroadTelemetryRules | Where-Object
 $broadTelemetryDnsPoliciesAbsent = -not @($forbiddenBroadTelemetryDnsDomains | Where-Object {
   $text -match ('(?m)^\s*' + [regex]::Escape($_) + ':\s*$')
 }).Count
+# 只看真正的 Claude / Anthropic 标识；遥测类域名（sentry / statsig / datadog / intercom 等）
+# 按设计允许留在订阅自己的分流里，不由本项判定。
 $legacyClaudeBindings = @($text -split "`r?`n" | Where-Object {
   $_ -match '^-(?: DOMAIN| IP-| DOMAIN-KEYWORD)' -and
-  $_ -match '(?i)(anthropic|claude|usefathom|sentry|statsig|datadog|sift|intercom|160\.79\.104|2607:6bc0|399358)' -and
-  $_ -match ',IpEqual(?:,|$)'
+  $_ -match '(?i)(anthropic|claude|160\.79\.104|2607:6bc0|399358)' -and
+  $_ -notmatch ',ACCOUNT-US(?:,|$)'
 })
+# DNS 绑定后缀只允许 ACCOUNT-US；出现其它组名即视为残留的订阅组耦合。
+$foreignDnsBindingGroups = @([regex]::Matches($text, '#([\w\-\.]+)&disable-ipv6') |
+  ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'ACCOUNT-US' } | Select-Object -Unique)
 
 $checks = [ordered]@{
   ModeIsRule = ($live.mode -eq 'rule')
@@ -134,8 +139,8 @@ $checks = [ordered]@{
   AccountListenerExactlyOnce = (([regex]::Matches($text, '(?m)^- name: account-us-socks$')).Count -eq 1)
   AccountRuleExactlyOnce = (([regex]::Matches($text, '(?m)^- IN-NAME,account-us-socks,ACCOUNT-US$')).Count -eq 1)
   ClaudeRulesUseAccountUS = ($missingClaudeRules.Count -eq 0)
-  NoClaudeRulesBoundToIpEqual = ($legacyClaudeBindings.Count -eq 0)
-  NoDnsBoundToIpEqual = ($text -notmatch '#IpEqual&disable-ipv6')
+  NoClaudeRulesBoundToOtherGroups = ($legacyClaudeBindings.Count -eq 0)
+  NoDnsBoundToOtherGroups = ($foreignDnsBindingGroups.Count -eq 0)
   ClaudeDnsUsesAccountUS = $claudeDnsUsesAccountUS
   NoBroadTelemetryRulesInAccountUS = $broadTelemetryRulesAbsent
   NoBroadTelemetryDnsInAccountUS = $broadTelemetryDnsPoliciesAbsent

@@ -40,7 +40,7 @@
 ## 快速开始
 
 1. **确认端口**：`43865`、`43866`、`43867` 都在监听，归属进程是 `verge-mihomo`。
-2. **全量体检**（约 45 秒）：`pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1`
+2. **全量体检**（约 1 分钟）：`pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1`
 3. **读结果**：`FAIL = 0` 才算程序层通过；`WARN` 逐条看提示；有 `FAIL` 先别启动 Claude，按 [排查手册](./references/02-验收与排查手册.md) 查。
 4. **人工验收**（可选）：`pwsh -File scripts\Claude环境一键总检.ps1 -OpenBrowser`
 
@@ -70,7 +70,7 @@
 - **ping0 限流**：连跑多次偶尔被 Cloudflare 挑战页拦下，脚本报 `WARN` 并自动重试一次，隔一会儿再跑即可。
 - **Desktop 直连阻断**：从未做端到端实测；只核验规则存在、版本匹配和 30 天时效。
 - **残留风险**：Node 侧独立 DNS 调用不在 WFP 精确规则覆盖内，只靠 TUN + 53 劫持兜底。
-- **订阅补丁**：某订阅里的 `delete: - DOMAIN-SUFFIX,gov,DIRECT` 针对当前订阅，换订阅后要复核。
+- **订阅级 rules 覆写**：本套**不依赖**它。Claude 的组、置顶规则、listener 与 DNS policy 全部由全局扩展脚本注入；换订阅后在 `ACCOUNT-US` 手选一次节点即可，订阅侧不需要补写任何覆写。
 - **未验证**：`egressProxyUrl` 是否支持 `socks5://`，官方文档未写明。
 - **端口字面量**：部分旧文件端口仍是硬编码（多为一次性脚本），改端口时用 `Check-PortConsistency.ps1 -Json` 出清单照单同步。
 

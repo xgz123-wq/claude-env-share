@@ -72,7 +72,7 @@ $checks = @(
   }
   [pscustomobject]@{
     Item = '3. DNS 走代理'
-    Status = if ($result.Checks.NoDnsBoundToIpEqual -and $result.Checks.ClaudeDnsUsesAccountUS -and $browserEntryReady) { '程序通过，确认网页' } else { '不通过' }
+    Status = if ($result.Checks.NoDnsBoundToOtherGroups -and $result.Checks.ClaudeDnsUsesAccountUS -and $browserEntryReady) { '程序通过，确认网页' } else { '不通过' }
     Evidence = 'Claude 域名使用经 ACCOUNT-US 的 DoH；网页不能出现中国本地运营商 DNS。海外递归器因 Anycast 与美国出口不同不等于本地泄露'
   }
   [pscustomobject]@{

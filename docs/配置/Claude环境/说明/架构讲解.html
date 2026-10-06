@@ -362,7 +362,7 @@
   <li>把下面的内容<b>全部</b>粘贴进去，保存（AI 部署时由安装脚本写入，效果相同）</li>
 </ol>
 
-<div class="code tall rv"><div class="bar"><span class="lbl">Clash全局账号通道.js · 全局扩展脚本</span><button onclick="cp(this)">复制</button></div><pre>function main(config, profileName) {
+<div class="code tall rv"><div class="bar"><span class="lbl">Clash全局账号通道.js · 全局扩展脚本（讲解节选）</span><button onclick="cp(this)">复制</button></div><pre>function main(config, profileName) {
   var groupName = "ACCOUNT-US";
   var listenerName = "account-us-socks";
   var inboundRule = "IN-NAME," + listenerName + "," + groupName;
@@ -374,6 +374,7 @@
     "+.anthropic.com",
     "+.claude.ai",
     "+.claude.com",
+    "+.claude.app",
     "+.clau.de",
     "+.claudemcpclient.com",
     "+.claudemcpcontent.com",
@@ -390,6 +391,7 @@
     "DOMAIN-SUFFIX,anthropic.com",
     "DOMAIN-SUFFIX,claude.ai",
     "DOMAIN-SUFFIX,claude.com",
+    "DOMAIN-SUFFIX,claude.app",
     "DOMAIN-SUFFIX,clau.de",
     "DOMAIN-SUFFIX,claudemcpclient.com",
     "DOMAIN-SUFFIX,claudemcpcontent.com",
@@ -534,12 +536,15 @@
   return config;
 }</pre></div>
 
+<div class="box warn rv"><span class="t">这是讲解用节选，别直接拿去用</span>
+<p>上面这段用来讲清逻辑，和仓库里真正的 <code>Clash/Clash全局账号通道.js</code> 并不逐字相同（节选里没有 DoH 端点强制直连、邮件端口规则清理、<code>geox-url</code> 国内镜像等几处）。<b>实际部署以文件或安装脚本写入的版本为准</b>，手工粘贴请打开 <code>Clash/Clash全局账号通道.js</code> 整份复制。</p></div>
+
 <div class="tw rv"><table>
 <tr><th>脚本做了什么</th><th>为什么</th></tr>
 <tr><td>新建 <code>ACCOUNT-US</code> 组（包含订阅全部节点，由你手选一个）</td><td>不依赖订阅的组名，换订阅后组还在，重选一次节点即可</td></tr>
-<tr><td>规则最前面插入：入站 <code>IN-NAME</code> + 11 条 Claude 域名 + 3 条 IP 兜底（<code>160.79.104.0/21</code>、<code>2607:6bc0::/32</code>、<code>AS399358</code>）</td><td>Claude 流量不会被订阅里的其他规则截走</td></tr>
+<tr><td>规则最前面插入：入站 <code>IN-NAME</code> + 12 条 Claude 域名 + 3 条 IP 兜底（<code>160.79.104.0/21</code>、<code>2607:6bc0::/32</code>、<code>AS399358</code>）</td><td>Claude 流量不会被订阅里的其他规则截走</td></tr>
 <tr><td>建两个监听：SOCKS <code>43866</code>（给 Chrome）、HTTP <code>43867</code>（给 Desktop，直接指向组）</td><td>浏览器和桌面版有专属入口，整口进组</td></tr>
-<tr><td>Claude 的 7 个域名后缀用 DoH（<code>1.1.1.1</code> / <code>8.8.8.8</code>）解析，DoH 连接本身也走专用组</td><td>Claude 域名的解析不经过国内运营商</td></tr>
+<tr><td>Claude 的 8 个域名后缀用 DoH（<code>1.1.1.1</code> / <code>8.8.8.8</code>）解析，DoH 连接本身也走专用组</td><td>Claude 域名的解析不经过国内运营商</td></tr>
 <tr><td>TUN 开 <code>strict-route</code>，<code>dns-hijack</code> 接管所有 53 端口</td><td>Windows 多网卡会并行查 DNS，不接管就有绕行</td></tr>
 <tr><td>清掉旧规则，包括以前让 sentry、statsig、datadog、intercom 等第三方监控也走专用组的写法</td><td>这些第三方服务别的软件也在用，塞进专用组会把出口用杂；现在交给订阅规则</td></tr>
 <tr><td>geo 数据库（含 ASN 库）改用 MetaCubeX 源，每天更新</td><td>IP-ASN 规则缺库会让整份配置加载失败</td></tr>

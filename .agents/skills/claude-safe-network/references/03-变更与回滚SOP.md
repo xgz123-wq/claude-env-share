@@ -19,7 +19,7 @@
 **核心结论：脚本与规则一行都不用改。** 因为 `Script.js` 的 `ACCOUNT-US` 组声明了
 `include-all-proxies: true`，会自动吃下新订阅的全部节点；Claude 置顶规则是全局注入的，与订阅无关。
 
-### 4 步复核清单
+### 5 步复核清单
 
 | 步 | 做什么 | 期望 | 不通过怎么办 |
 |---|---|---|---|
@@ -27,7 +27,7 @@
 | 2 | **跑 9 层一键全检**（pwsh 7） | `0 FAIL`，退出码 `0`；WARN 逐条确认 | 有 FAIL 按 `02-验收与排查手册.md` 决策树查 |
 | 3 | **跑 IP 检测两个脚本**：`checks\Check-IpReputation.ps1` + `checks\Check-ClaudeIp.ps1` | 见 `04-Ip信誉检测.md` 合格线 | 命中机房/黑名单 → 换节点或换订阅 |
 | 4 | **人工看 `ippure.com`** 确认新出口（唯一仍需人眼的站） | 页面 IP 与脚本一致 | 不一致 → 说明某个入口没走 `ACCOUNT-US` |
-| 5 | **复核 per-profile 的 `delete: DOMAIN-SUFFIX,gov,DIRECT`** | 目标在新订阅里仍存在 | 不存在 → 删掉这行（无害但不干净） |
+| 5 | （可选，与 Claude 链路无关）旧订阅的 per-profile 覆写里若留着 `delete:` 补丁 | 目标在新订阅里仍存在 | 不存在 → 删掉那行（无害但不干净）。**本套不依赖订阅级覆写，不做这步也不影响 Claude 链路** |
 
 ### 换订阅后**自动生效**的部分（不用管）
 
@@ -37,7 +37,7 @@ TUN `strict-route` + `dns-hijack` · Claude 专属 DNS policy · `geox-url.asn` 
 ### 换订阅后**需要人工**的部分
 
 ① 手动重选节点（见上表步 1）；② 新订阅自带的 Claude 规则会被自动清掉（`isManagedClaudeRule()`），
-**不需要手工去重**；③ 复核 `delete` 补丁。
+**不需要手工去重**；③（可选）清理旧订阅遗留的 `delete:` 补丁 —— 本套不依赖订阅级覆写，不做也不影响。
 
 ### 不要做的事
 
@@ -69,12 +69,12 @@ Desktop 是 MSIX 包，升级会换目录名 `WindowsApps\Claude_<版本>_x64__p
 ### 顺带检查
 
 - `%LOCALAPPDATA%\Claude-3p\configLibrary\_meta.json` 的 `appliedId` 是否仍指向有效文件
-- 桌面 6 个 `.lnk` 是否仍存在、参数是否被别人改过
+- 桌面 Claude 相关 `.lnk` 是否仍存在、是否与 `assets\shortcuts\` 基线一致（用 `Repair-Shortcuts.ps1` 预览模式比对，它只报告不写盘）
 - 跑 `启动Claude英文浏览器.ps1 -CheckOnly` 应 `[PASS]` 而非 `[BLOCK]`
 
 ### 已知历史
 
-Desktop 已从 `1.49585` 升到 `1.52386.3.0`，过程中 WFP 规则**已发生 3 次真实迁移**。这不是异常，是常态。
+Desktop 每次升级都会换 `WindowsApps\Claude_<版本>_x64__pzs8sxrjxfjjc` 目录名，WFP 精确规则随之**全部失效且不报错** —— 这已多次发生，属常态，升级后按 SOP-2 重签即可。
 
 ## SOP-3 改端口或改组名
 
@@ -130,9 +130,10 @@ pwsh -File scripts\apply\Repair-Shortcuts.ps1 -Apply    # 用原版备份覆盖�
 - 只有 `-Apply` 才写盘，写盘后立刻复核哈希。
 - 桌面另有 `Claude|KK-` 匹配但不在基线里的 `.lnk` → 只打 `[INFO]`，不动。
 
-**基线内容**（`assets\shortcuts\`，5 个）：3 个脚本类（`Claude-环境一键总检` / `Claude-五项自检` /
-`Claude-英文浏览器`，参数指回 `docs\配置\` 原路径）+ 2 个浏览器类（`Claude-账号1-专用Chrome` /
-`Claude-账号2-专用Chrome`）。
+**基线内容**：本分享版**不带**原机器的 `.lnk`，`assets\shortcuts\` 里只有 `说明.md`。部署后应包含 3 个脚本类
+（`Claude-环境一键总检` / `Claude-五项自检` / `Claude-英文浏览器`，参数指回 `docs\配置\` 原路径）
+与各账号专用 Chrome 快捷方式；把这些桌面快捷方式复制进本目录，作为还原源。复制之前
+`Check-SuiteIntegrity` 的快捷方式备份项报 FAIL，属预期。
 
 ### 为什么是这个方向
 

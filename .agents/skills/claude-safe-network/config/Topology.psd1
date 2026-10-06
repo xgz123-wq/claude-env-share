@@ -19,8 +19,7 @@
     }
 
     Groups = @{
-        Primary            = 'ACCOUNT-US'  # 自建全局脚本注入的组，Claude 专用
-        SubscriptionDefault = 'IpEqual'    # 订阅自带的组，非 Claude 用途
+        Primary = 'ACCOUNT-US'  # 自建全局脚本注入的组，Claude 专用；不依赖订阅自带的组名
     }
 
     Listeners = @{

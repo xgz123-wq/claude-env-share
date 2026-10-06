@@ -34,7 +34,7 @@ system-routing:
   dns:
     enhanced-mode: fake-ip
     ipv6: false
-    forbidden-binding: '#IpEqual&disable-ipv6'
+    forbidden-binding: '把 DNS 绑定到订阅自带的组名（形如 `#<组名>&disable-ipv6`）；只允许 #ACCOUNT-US'
     nameservers:
       - 8.8.8.8
       - https://doh.pub/dns-query
@@ -63,6 +63,7 @@ claude-rules:
     - DOMAIN-SUFFIX,anthropic.com,ACCOUNT-US
     - DOMAIN-SUFFIX,claude.ai,ACCOUNT-US
     - DOMAIN-SUFFIX,claude.com,ACCOUNT-US
+    - DOMAIN-SUFFIX,claude.app,ACCOUNT-US
     - DOMAIN-SUFFIX,clau.de,ACCOUNT-US
     - DOMAIN-SUFFIX,claudemcpclient.com,ACCOUNT-US
     - DOMAIN-SUFFIX,claudemcpcontent.com,ACCOUNT-US
@@ -129,8 +130,8 @@ acceptance:
     - 43865与43866均由Mihomo监听
     - ACCOUNT-US存在并选择节点
     - Claude规则全部指向ACCOUNT-US
-    - 不存在Claude到IpEqual的旧绑定
-    - 不存在DNS到IpEqual的旧绑定
+    - Claude规则全部指向ACCOUNT-US，不指向任何订阅自带的组
+    - DNS绑定后缀只出现ACCOUNT-US
     - Mihomo配置校验通过
     - 飞书普通链路可访问
     - 43866有稳定公网IPv4出口

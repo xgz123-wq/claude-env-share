@@ -72,10 +72,10 @@ claude-safe-network/                      ← 整个目录可拷贝，零外部�
 ## 入口命令（全部用 **pwsh 7**，不是 `powershell.exe`）
 
 ```powershell
-# ① 一键全检（9 层，约 40s，含联网）
+# ① 一键全检（9 层，约 1 分钟，含联网；耗时随检测站响应波动）
 pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1
 
-# ② 快查（跳过联网层 proxy / chrome / ip / claudeip，只剩本机配置层，约 10s；不弹 UAC，提权缓存不匹配只报 WARN）
+# ② 快查（跳过联网层 proxy / chrome / ip / claudeip，只剩本机配置层，约 10～16s；不弹 UAC，提权缓存不匹配只报 WARN）
 pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1 -Fast
 
 # ③ 只跑某几层
