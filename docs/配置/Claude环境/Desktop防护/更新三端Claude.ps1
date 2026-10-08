@@ -69,6 +69,21 @@ try {
 
     $pluginNow = $versions.Results | Where-Object { $_.Product -like 'VS Code*' }
     $pluginMoved = [bool]($pluginNow -and ($pluginNow.ProtectedPathMatches -eq $false) -and $pluginIndex -ge 0)
+
+    # 插件换目录时旧路径可能已不存在，且第 4 项必须用新目录程序的指纹。
+    $pluginApproved = $null
+    if ($pluginMoved) {
+        $newPluginPath = [string]$pluginNow.CurrentExe
+        if (-not (Test-Path -LiteralPath $newPluginPath)) { throw ('插件新路径不存在：' + $newPluginPath) }
+        $pluginApproved = (Get-FileHash -LiteralPath $newPluginPath -Algorithm SHA256).Hash
+        if ($pluginApproved -ne [string]$pluginNow.CurrentSHA256) { throw '插件新程序与查询脚本给出的指纹不一致。' }
+        $signature = Get-AuthenticodeSignature -LiteralPath $newPluginPath
+        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O="?Anthropic, PBC"?(,|$)') {
+            throw '插件新程序缺少有效的 Anthropic 签名，拒绝进入更新参数。'
+        }
+        $hashes[$pluginIndex] = $pluginApproved
+    }
+
     $result.ChangedTargets = $changed
     $result.Plan = [ordered]@{
         DesktopBehind = $desktopBehind
@@ -76,7 +91,8 @@ try {
         PackageSHA256 = [string]$package.SHA256
         PluginMoved = $pluginMoved
         OldPluginPath = [string]($manifest.Targets[$pluginIndex].Path)
-        NewPluginPath = [string]$pluginNow.CurrentExe
+        NewPluginPath = if ($pluginMoved) { [string]$pluginNow.CurrentExe } else { $null }
+        PluginApprovedSHA256 = $pluginApproved
         CliApprovedSHA256 = $hashes
     }
 
@@ -89,7 +105,7 @@ try {
     $command = '& ' + (Quote-Literal (Join-Path $PSScriptRoot '一键更新ClaudeDesktop.ps1')) + ' -Action Update'
     if ($desktopBehind) { $command += ' -PackagePath ' + (Quote-Literal $package.PackagePath) + ' -ApprovedSHA256 ' + (Quote-Literal $package.SHA256) }
     $command += ' -CliApprovedSHA256 ' + ((@($hashes) | ForEach-Object { Quote-Literal $_ }) -join ',')
-    if ($pluginMoved) { $command += ' -PluginApprovedSHA256 ' + (Quote-Literal $hashes[$pluginIndex]) }
+    if ($pluginMoved) { $command += ' -PluginApprovedSHA256 ' + (Quote-Literal $pluginApproved) }
     $result.Command = $command
 
     if ($Action -eq 'Plan') {

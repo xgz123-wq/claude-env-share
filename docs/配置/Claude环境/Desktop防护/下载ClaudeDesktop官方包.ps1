@@ -10,6 +10,15 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $PSStyle.OutputRendering = 'PlainText'
+
+# 复用底层 Inspect：签名、包家族、发布者、架构、主程序声明全部在那里审核；失败抛错并带原始输出。
+function Get-Inspection {
+    param([string]$Path)
+    $out = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot '更新ClaudeDesktop.ps1') -Action Inspect -PackagePath $Path 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw ('安装包审核未通过：' + $out.Trim()) }
+    return ($out | ConvertFrom-Json)
+}
+
 $result = [ordered]@{At=(Get-Date -Format o);Status='running';OS=$null;Architecture=$null;InstalledVersion=$null;LatestVersion=$null;SourceUrl=$null;DownloadUrl=$null;PackagePath=$null;SHA256=$null;Signature=$null;NextCommand=$null;Error=$null}
 try {
     if (-not $IsWindows) { throw '本流程只支持 Windows MSIX 安装；macOS 需另行编写。' }
@@ -61,21 +70,33 @@ try {
 
     $downloadDir = Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\Desktop安装包下载'
     $null = New-Item -ItemType Directory -Path $downloadDir -Force
-    # 临时名下载，审核通过后才改成 Claude-<版本>.msix；未通过的包当场删除，不留残留。
-    $partial = Join-Path $downloadDir ('Claude-download-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.msix')
-    try {
-        Invoke-WebRequest -Uri $downloadUri -Proxy $Proxy -OutFile $partial -TimeoutSec 1800
-        # 复用底层 Inspect：签名、包家族、发布者、架构、主程序声明全部在那里审核。
-        $inspectOutput = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot '更新ClaudeDesktop.ps1') -Action Inspect -PackagePath $partial 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) { throw ('安装包审核未通过：' + $inspectOutput.Trim()) }
-        $inspection = $inspectOutput | ConvertFrom-Json
-    } catch {
-        Remove-Item -LiteralPath $partial -ErrorAction SilentlyContinue
-        throw
+    # 已按版本名落盘且审核通过的包直接复用，重跑 Plan 不再重复拉 293MB。
+    $final = Join-Path $downloadDir ('Claude-' + $urlVersion + '.msix')
+    $inspection = $null
+    if ($urlVersion -and (Test-Path -LiteralPath $final)) {
+        try {
+            $inspection = Get-Inspection -Path $final
+            if ($inspection -and [version]$inspection.NewVersion -eq [version]$urlVersion) {
+                $result.DownloadUrl = $downloadUri.AbsoluteUri + '（本地已有审核通过的包，未重新下载）'
+            } else {
+                $inspection = $null
+            }
+        } catch { $inspection = $null }
     }
-    $final = Join-Path $downloadDir ('Claude-' + $inspection.NewVersion + '.msix')
-    Move-Item -LiteralPath $partial -Destination $final -Force
-    if ((Get-FileHash -LiteralPath $final).Hash -ne $inspection.SHA256) { throw '改名后安装包哈希变化。' }
+    if (-not $inspection) {
+        # 临时名下载，审核通过后才改成 Claude-<版本>.msix；未通过的包当场删除，不留残留。
+        $partial = Join-Path $downloadDir ('Claude-download-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.msix')
+        try {
+            Invoke-WebRequest -Uri $downloadUri -Proxy $Proxy -OutFile $partial -TimeoutSec 1800
+            $inspection = Get-Inspection -Path $partial
+        } catch {
+            Remove-Item -LiteralPath $partial -ErrorAction SilentlyContinue
+            throw
+        }
+        $final = Join-Path $downloadDir ('Claude-' + $inspection.NewVersion + '.msix')
+        Move-Item -LiteralPath $partial -Destination $final -Force
+        if ((Get-FileHash -LiteralPath $final).Hash -ne $inspection.SHA256) { throw '改名后安装包哈希变化。' }
+    }
     $result.LatestVersion = $inspection.NewVersion
     $result.PackagePath = $final
     $result.SHA256 = $inspection.SHA256
