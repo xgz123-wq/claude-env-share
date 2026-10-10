@@ -67,8 +67,8 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 1. **确认现场**：读版本（从包元数据读，不启动 Claude）、Claude 进程、HKLM `disableAutoUpdates=1` 与同层 `egressProxyUrl`、CLI 的 `DISABLE_AUTOUPDATER=1`。缺失或冲突先报告，不顺带改用户设置；不输出认证文件或密钥。发现 Claude 正在运行就停止安装，不强杀，也不在 Claude Code 会话里更新自身，交给退出后的 Codex 或独立维护进程执行。
 2. **准备**：先跑 `查询Claude最新版本.ps1` 确认谁落后；Desktop 落后且用户要更新时，普通权限运行 `下载ClaudeDesktop官方包.ps1` 下载并审核；需要更新 CLI 时，按固定来源表查版本并安装指定版本。
-3. **审核**：按 `Targets` 顺序读取四个程序的 SHA256 和 Anthropic 签名，逐个核对；不能直接从磁盘取指纹就批准。
-4. **执行（只弹一次 UAC）**：`一键更新ClaudeDesktop.ps1 -Action Update`，传 `-PackagePath` 和 `-ApprovedSHA256`（Desktop 有新版时），`-PluginApprovedSHA256 '<h>'`（插件换了版本目录时；指纹和签名由 `查询Claude最新版本.ps1` 的插件行给出，审核后填入），以及 `-CliApprovedSHA256 '<h1>','<h2>','<h3>','<h4>'`（CLI 或插件同路径文件变化时；插件已迁移时第 4 个填新插件指纹）。工作进程依次完成插件迁移、指纹刷新、Desktop 迁移、Verify、总检、启动条件检查、Skill 副本同步、安装包清理，结果写入 `统一维护-*\结果.json`。不要再单独以管理员身份跑 `应用直连防护管理.ps1 -Action Refresh`。
+3. **审核**：按 `Targets` 顺序读取四个程序的 SHA256 和 Anthropic 签名，逐个核对；不能直接从磁盘取指纹就批准。指纹与基线不符时先停下交叉核实：算文件实际哈希并比对文件修改时间与基线准备时间，落盘晚于基线即「更新异步落盘」而非篡改；审核新指纹（签名 Valid、版本与包一致）后按清单顺序执行 `应用直连防护管理.ps1 -Action Refresh -ApprovedSHA256 <4 个哈希> -SkipNetworkProbe` 接受，需管理员权限（一次 UAC）且所有 Claude 进程已退出，脚本自动备份并在失败时回滚。
+4. **执行（只弹一次 UAC）**：`一键更新ClaudeDesktop.ps1 -Action Update`，传 `-PackagePath` 和 `-ApprovedSHA256`（Desktop 有新版时），`-PluginApprovedSHA256 '<h>'`（插件换了版本目录时；指纹和签名由 `查询Claude最新版本.ps1` 的插件行给出，审核后填入），以及 `-CliApprovedSHA256 '<h1>','<h2>','<h3>','<h4>'`（CLI 或插件同路径文件变化时；插件已迁移时第 4 个填新插件指纹）。工作进程依次完成插件迁移、指纹刷新、Desktop 迁移、Verify、总检、启动条件检查、Skill 副本同步、安装包清理，结果写入 `统一维护-*\结果.json`。更新流程内部不要再单独以管理员身份跑 `应用直连防护管理.ps1 -Action Refresh`（刷新由工作进程完成）；单独 Refresh 只用于更新流程之外接受审核过的指纹（见第 3 步）。
 5. **失败时**：停下后续步骤，保留防护、日志和安装包，按 `Desktop防护/更新维护说明.md` 区分注册前、注册后，用 `-ResumeJournal` 续接。没有旧安装包就不承诺降级。
 
 插件只经 VS Code 官方入口手动更新 `anthropic.claude-code`；当前内置 `claude.exe` 已纳入 WFP。总检要求活动插件唯一、固定版本、平台和路径与清单一致且未配置 wrapper。插件版本目录变化时，`查询Claude最新版本.ps1` 的插件行会显示 `ProtectedPathMatches=false` 并给出新程序指纹和签名；审核后经 `-PluginApprovedSHA256` 迁移：先给新路径加规则、改清单和状态，最后撤旧规则，不跑联网探针。新路径以 VS Code `extensions.json` 当前登记为准，不猜测。旧版本目录由 VS Code 自己清理。
