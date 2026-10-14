@@ -19,7 +19,7 @@ function Get-Inspection {
     return ($out | ConvertFrom-Json)
 }
 
-$result = [ordered]@{At=(Get-Date -Format o);Status='running';OS=$null;Architecture=$null;InstalledVersion=$null;LatestVersion=$null;SourceUrl=$null;DownloadUrl=$null;PackagePath=$null;SHA256=$null;Signature=$null;NextCommand=$null;Error=$null}
+$result = [ordered]@{At=(Get-Date -Format o);Status='running';OS=$null;Architecture=$null;InstalledVersion=$null;LatestVersion=$null;SourceUrl=$null;DownloadUrl=$null;PackagePath=$null;SHA256=$null;Signature=$null;NextCommand=$null;Timing=[ordered]@{};Error=$null}
 try {
     if (-not $IsWindows) { throw '本流程只支持 Windows MSIX 安装；macOS 需另行编写。' }
     $result.OS = 'win32'
@@ -84,13 +84,23 @@ try {
         } catch { $inspection = $null }
     }
     if (-not $inspection) {
-        # 临时名下载，审核通过后才改成 Claude-<版本>.msix；未通过的包当场删除，不留残留。
-        $partial = Join-Path $downloadDir ('Claude-download-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.msix')
+        # 固定临时名支持失败后断点续传；只有完整包审核通过后才改成 Claude-<版本>.msix。
+        $partial = Join-Path $downloadDir ('Claude-' + $urlVersion + '.partial.msix')
         try {
-            Invoke-WebRequest -Uri $downloadUri -Proxy $Proxy -OutFile $partial -TimeoutSec 1800
+            # Invoke-WebRequest 的 TimeoutSec 是总超时，服务端未开始传输时会让 0 字节文件空等 30 分钟。
+            # curl 断线后重试并从已有字节继续；连续 20 秒低于 100 KiB/s 就断开重连（正常约 2 MB/s）。
+            # 旧门槛 1 KiB/s 判不出慢线路：10-14 前 2.5 分钟只有约 86 KB/s 却一直不重连。
+            $watch = [Diagnostics.Stopwatch]::StartNew()
+            & curl.exe --fail --location --silent --show-error --proxy $Proxy `
+                --connect-timeout 20 --speed-limit 102400 --speed-time 20 `
+                --continue-at - --retry 10 --retry-all-errors --retry-delay 2 `
+                --output $partial $downloadUri.AbsoluteUri
+            if ($LASTEXITCODE -ne 0) { throw ('Desktop 安装包下载失败，curl 退出码：' + $LASTEXITCODE + '；已下部分保留，重跑会续传。') }
+            $result.Timing.DownloadSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
+            $watch.Restart()
             $inspection = Get-Inspection -Path $partial
+            $result.Timing.InspectSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
         } catch {
-            Remove-Item -LiteralPath $partial -ErrorAction SilentlyContinue
             throw
         }
         $final = Join-Path $downloadDir ('Claude-' + $inspection.NewVersion + '.msix')

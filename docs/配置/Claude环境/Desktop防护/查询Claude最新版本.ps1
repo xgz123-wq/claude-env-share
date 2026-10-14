@@ -70,7 +70,8 @@ try {
     }
     $body = '{"filters":[{"criteria":[{"filterType":7,"value":"anthropic.claude-code"}]}],"flags":16}'
     $r = Invoke-RestMethod -Uri 'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery' -Method Post -Body $body -ContentType 'application/json' -Headers @{Accept='application/json;api-version=7.2-preview.1'} -Proxy $Proxy -TimeoutSec 60
-    $versions = @($r.results[0].extensions[0].versions | Where-Object { $_.targetPlatform -eq 'win32-x64' } | ForEach-Object { [version]$_.version } | Sort-Object -Descending)
+    # 只比正式版：预发布版 VS Code 不会推给正式通道，算进来会让 Plan 误报插件落后而停下。
+    $versions = @($r.results[0].extensions[0].versions | Where-Object { $_.targetPlatform -eq 'win32-x64' -and -not ($_.properties | Where-Object { $_.key -eq 'Microsoft.VisualStudio.Code.PreRelease' -and $_.value -eq 'true' }) } | ForEach-Object { [version]$_.version } | Sort-Object -Descending)
     if ($versions.Count -eq 0) { throw '官方市场没有返回 win32-x64 版本。' }
     $plugin.Latest = [string]$versions[0]
 } catch { $plugin.Error = $_.Exception.Message }

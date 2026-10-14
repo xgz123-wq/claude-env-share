@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 $PSStyle.OutputRendering = 'PlainText'
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$result = [ordered]@{At=(Get-Date -Format o);Action=$Action;Status='running';Version=$null;HashCount=0;FiltersCount=0;Disabled=$null;Proxy=$null;UACWorker=[bool]$Worker;ApplicationsLaunched=$false;Logs=@();Checks=$null;Error=$null}
+$result = [ordered]@{At=(Get-Date -Format o);Action=$Action;Status='running';Version=$null;HashCount=0;FiltersCount=0;Disabled=$null;Proxy=$null;UACWorker=[bool]$Worker;ApplicationsLaunched=$false;Logs=@();StepSeconds=[ordered]@{};Checks=$null;Error=$null}
 function Save-Result {
     $result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $resultPath -Encoding utf8
 }
@@ -33,8 +33,10 @@ function Run-Step([string]$Name, [string]$Script, [string[]]$Arguments, [switch]
     $result.Logs += $log
     # Script 为空时 Arguments 自带 -EncodedCommand，用于要传数组参数的步骤。
     $invoke = if ($Script) { @('-File',$Script) + $Arguments } else { $Arguments }
+    $watch = [Diagnostics.Stopwatch]::StartNew()
     $output = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive @invoke 2>&1 | Out-String
     $script:stepExit = $LASTEXITCODE
+    $result.StepSeconds[$Name] = [math]::Round($watch.Elapsed.TotalSeconds,1)
     $output | Set-Content -LiteralPath $log -Encoding utf8
     Save-Result
     if ($script:stepExit -ne 0 -and -not $AllowFailure) { throw ($Name + ' 失败；详情：' + $log) }
@@ -174,7 +176,10 @@ try {
     Assert-Closed
     # 只在全部核验通过后清理；失败时安装包要留给 -ResumeJournal 续接。
     if ($Action -eq 'Update') {
+        # 10-14 这一段从总检结束到写完结果用了 1:36，代码上只是删 3 个文件；单独计时以便定位。
+        $watch = [Diagnostics.Stopwatch]::StartNew()
         $result.Cleanup = Remove-UsedPackages
+        $result.StepSeconds['安装包清理'] = [math]::Round($watch.Elapsed.TotalSeconds,1)
         if ($result.Cleanup.Errors.Count) { $result.Checks.WARN++ }
     }
     $result.Status = if ($result.Checks.WARN -gt 0) { 'passed_with_warnings' } else { 'passed' }
