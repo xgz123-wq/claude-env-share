@@ -42,7 +42,7 @@
 | 每天启动与检查 | [日常使用](说明/日常使用.md) |
 | 每周或更新后复核 Claude 域名 | 运行 `Clash/检查Claude官方域名.ps1`；分工与新域名处理见 [DNS 分层与域名维护](说明/DNS分层说明.md#claude-域名定期复核) |
 | 安装或检查 Anthropic 网段直连阻断 | [Anthropic 网段直连阻断](说明/Anthropic网段直连阻断.md)；首次部署后总检会验证 |
-| 更新 Desktop / CLI / 插件，或手动更新后补同步 | 先用 npm 装 CLI、在 VS Code 更新插件，再跑 `Desktop防护/更新三端Claude.ps1 -Action Plan`，按输出的 `Command` 执行；通用流程见 [claude-maintenance](../../../.agents/skills/claude-maintenance/SKILL.md) |
+| 更新 Desktop / CLI / 插件，或手动更新后补同步 | CLI 自更新后不用同步；插件或 Desktop 变了再跑 `Desktop防护/更新三端Claude.ps1 -Action Plan`，按输出的 `Command` 执行；分流规则见 [claude-maintenance](../../../.agents/skills/claude-maintenance/SKILL.md#先分流更新后要做什么) |
 | Desktop 更新细则 | [更新维护说明](Desktop防护/更新维护说明.md) |
 | 网络排障、改端口；换订阅后的复核流程 | Skill [claude-safe-network](../../../.agents/skills/claude-safe-network/SKILL.md) |
 | 历次维护与未验收项 | [维护日志](维护日志.md) |

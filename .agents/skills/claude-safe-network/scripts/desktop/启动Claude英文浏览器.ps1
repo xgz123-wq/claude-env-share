@@ -73,6 +73,14 @@ function Test-RecordedFilters {
     return $true
 }
 
+# CLI 会自更新且路径不变，WFP 规则仍生效，所以两个 npm 目标允许按 Anthropic 签名放行；Desktop 和插件只认登记哈希。
+function Test-GuardBinary($Target) {
+    if ((Get-FileHash -LiteralPath $Target.Path -Algorithm SHA256).Hash -eq $Target.SHA256) { return $true }
+    if ([string]$Target.Name -notlike 'Claude Code npm*') { return $false }
+    $signature = Get-AuthenticodeSignature -LiteralPath $Target.Path
+    return ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'O="?Anthropic, PBC"?(,|$)')
+}
+
 function Assert-GuardEvidence {
     param([string]$PackageVersion)
 
@@ -115,7 +123,7 @@ function Assert-GuardEvidence {
         if (-not (Test-Path -LiteralPath $target.Path)) {
             throw ('直连防护目标不存在：' + $target.Name)
         }
-        if ((Get-FileHash -LiteralPath $target.Path -Algorithm SHA256).Hash -ne $target.SHA256) {
+        if (-not (Test-GuardBinary $target)) {
             throw ('程序文件已变化，需要重新核验直连防护：' + $target.Name)
         }
     }

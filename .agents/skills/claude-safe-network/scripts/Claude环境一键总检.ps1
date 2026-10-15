@@ -94,6 +94,16 @@ function Test-GuardRecord {
   return $true
 }
 
+# 返回 hash / signature / $null。CLI 会自更新且路径不变，WFP 规则仍生效，所以两个 npm 目标允许按 Anthropic 签名放行；Desktop 和插件只认登记哈希。
+function Test-GuardBinary($Target) {
+  if (-not (Test-Path -LiteralPath $Target.Path)) { return $null }
+  if ((Get-FileHash -LiteralPath $Target.Path -Algorithm SHA256).Hash -eq $Target.SHA256) { return 'hash' }
+  if ([string]$Target.Name -notlike 'Claude Code npm*') { return $null }
+  $signature = Get-AuthenticodeSignature -LiteralPath $Target.Path
+  if ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'O="?Anthropic, PBC"?(,|$)') { return 'signature' }
+  return $null
+}
+
 Write-Host ''
 Write-Host 'Claude / Clash 环境一键总检' -ForegroundColor Cyan
 Write-Host ('检查时间：{0}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'))
@@ -269,10 +279,9 @@ if (Test-Path -LiteralPath $guardManifest) {
         $pluginPathProblem = 'VS Code 配置了 claudeProcessWrapper，实际启动程序不再是受保护的插件 claude.exe'
       }
     }
-    $validTargets = @($targets | Where-Object {
-      (Test-Path -LiteralPath $_.Path) -and
-      ((Get-FileHash -LiteralPath $_.Path -Algorithm SHA256).Hash -eq $_.SHA256)
-    })
+    $binaryChecks = @($targets | ForEach-Object { [pscustomobject]@{Target=$_;AcceptedBy=(Test-GuardBinary $_)} })
+    $validTargets = @($binaryChecks | Where-Object AcceptedBy | ForEach-Object Target)
+    $signedCli = @($binaryChecks | Where-Object AcceptedBy -eq 'signature' | ForEach-Object { $_.Target.Name })
     $state = if (Test-Path -LiteralPath $guardState) { Get-Content -LiteralPath $guardState -Raw | ConvertFrom-Json } else { $null }
     $verify = if (Test-Path -LiteralPath $guardVerify) { Get-Content -LiteralPath $guardVerify -Raw | ConvertFrom-Json } else { $null }
     $install = if (Test-Path -LiteralPath $guardInstall) { Get-Content -LiteralPath $guardInstall -Raw | ConvertFrom-Json } else { $null }
@@ -307,7 +316,8 @@ if (Test-Path -LiteralPath $guardManifest) {
     } else {
       $evidenceType = if ($verifyReady) { '管理员 Verify' } else { '管理员安装记录' }
       $ruleCount = $targets.Count * 2
-      Add-Result PASS 'Claude Desktop / Code 直连防护' "Desktop=$($package.Version)；目标哈希 $($validTargets.Count)/$($targets.Count)；$ruleCount 条精确阻断规则有$evidenceType"
+      $signedNote = if ($signedCli.Count) { "（其中 CLI 已自更新、按 Anthropic 签名放行：$($signedCli -join '、')）" } else { '' }
+      Add-Result PASS 'Claude Desktop / Code 直连防护' "Desktop=$($package.Version)；目标文件 $($validTargets.Count)/$($targets.Count)$signedNote；$ruleCount 条精确阻断规则有$evidenceType"
     }
   } catch {
     Add-Result FAIL 'Claude Desktop / Code 直连防护' ('防护记录无法完整核验：' + $_.Exception.Message)

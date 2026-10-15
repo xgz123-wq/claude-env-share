@@ -22,6 +22,14 @@ function Save-Report { $record|ConvertTo-Json -Depth 12|Set-Content -LiteralPath
 function Assert-Closed {
  if(@(Get-Process -Name Claude -ErrorAction SilentlyContinue).Count){throw 'Claude 正在运行，停止配置；本脚本不会启动或结束 Claude。'}
 }
+# 返回 hash / signature / $null。CLI 会自更新且路径不变，WFP 规则仍生效，所以两个 npm 目标允许按 Anthropic 签名放行；Desktop 和插件只认登记哈希。
+function Test-GuardBinary($target) {
+ if((Get-FileHash -LiteralPath $target.Path -Algorithm SHA256).Hash -eq $target.SHA256){return 'hash'}
+ if([string]$target.Name -notlike 'Claude Code npm*'){return $null}
+ $signature=Get-AuthenticodeSignature -LiteralPath $target.Path
+ if($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'O="?Anthropic, PBC"?(,|$)'){return 'signature'}
+ return $null
+}
 function Select-Filter($filters) {
  @($filters|Select-Object Key,Layer,Id,Flags,NativeAppPath,Enabled,Persistent,ProviderIsNull,ExactAppIdCondition,NonLoopbackCondition,IsOwnedExactBlock)
 }
@@ -211,7 +219,8 @@ try {
   if($Action -eq 'Verify'){
    $record.ManifestSHA256=(Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash
    $record.Targets=@(foreach($target in $manifest.Targets){
-   [pscustomobject]@{Name=$target.Name;Path=$target.Path;BinaryUnchanged=((Get-FileHash -LiteralPath $target.Path).Hash -eq $target.SHA256);Filters=(Select-Filter ([ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Verify($target.Path,[guid]$target.V4,[guid]$target.V6,$true)))}
+   $acceptedBy=Test-GuardBinary $target
+   [pscustomobject]@{Name=$target.Name;Path=$target.Path;BinaryUnchanged=[bool]$acceptedBy;AcceptedBy=$acceptedBy;Filters=(Select-Filter ([ClaudeDesktopNetworkGuard.DirectConnectionFilter]::Verify($target.Path,[guid]$target.V4,[guid]$target.V6,$true)))}
   })
   $record.PackageVersion=(Get-AppxPackage -Name Claude).Version.ToString()
   $record.PackageVersionMatches=($record.PackageVersion -eq $manifest.PackageVersion)

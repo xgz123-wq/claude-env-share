@@ -4,6 +4,7 @@
 # 前置条件：没有名为 claude 的进程在跑，有则报 blocked_running 由用户退出后重跑。
 # 前置条件：CLI 与插件已装到最新（本脚本只下载 Desktop、登记新指纹），仍落后就报 install_needed 并列出要先做的事，不下载。
 # 安全边界：哈希与清单不同时必须带有效 Anthropic 签名才允许进入更新参数；不结束进程、不改策略、不启动 Claude。
+# 只有 CLI 变了（Desktop 最新、插件没换目录）时报 up_to_date，CliSignatureAccepted 列出按签名放行的 CLI 目标。
 [CmdletBinding()]
 param([ValidateSet('Plan','Run')][string]$Action = 'Plan')
 
@@ -126,7 +127,11 @@ try {
         CliApprovedSHA256 = $hashes
     }
 
-    if (-not $desktopBehind -and -not $changed.Count -and -not $pluginMoved) {
+    # 只有 CLI 自更新（路径不变、已过签名检查）时 WFP 规则仍生效，总检和启动器按签名放行，不必为它弹 UAC；
+    # 新指纹留到下次 Desktop 或插件维护时随命令一起登记。
+    $needsGuardUpdate = @($changed | Where-Object { $_.Name -notlike 'Claude Code npm*' }).Count -gt 0
+    if (-not $desktopBehind -and -not $needsGuardUpdate -and -not $pluginMoved) {
+        $result.CliSignatureAccepted = @($changed | ForEach-Object { $_.Name })
         $result.Status = 'up_to_date'
         $result | ConvertTo-Json -Depth 8
         exit 0

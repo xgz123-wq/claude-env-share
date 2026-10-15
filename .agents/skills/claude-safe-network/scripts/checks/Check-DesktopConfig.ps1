@@ -131,6 +131,11 @@ if (Test-Path $manifestPath) {
         if (-not (Test-Path -LiteralPath $t.Path)) { $hashMissing++; continue }
         $h = (Get-FileHash -LiteralPath $t.Path -Algorithm SHA256 -ErrorAction SilentlyContinue).Hash
         if ($h -eq $t.SHA256) { $hashOk++ }
+        elseif ([string]$t.Name -like 'Claude Code npm*' -and ($sig = Get-AuthenticodeSignature -LiteralPath $t.Path).Status -eq 'Valid' -and $sig.SignerCertificate.Subject -match 'O="?Anthropic, PBC"?(,|$)') {
+            # CLI 自更新路径不变，WFP 规则仍生效；按 Anthropic 签名放行，新指纹留到下次 Desktop / 插件维护时登记。
+            $hashOk++
+            Add-CheckResult -Status 'PASS' -Item "CLI 签名放行：$($t.Name)" -Evidence "$($h.Substring(0,16))… ≠ 清单 $($t.SHA256.Substring(0,16))…，签名 Anthropic, PBC 有效"
+        }
         else {
             $hashBad++
             Add-CheckResult -Status 'FAIL' -Item "哈希漂移：$($t.Name)" -Evidence "$($h.Substring(0,16))… ≠ 清单 $($t.SHA256.Substring(0,16))…"

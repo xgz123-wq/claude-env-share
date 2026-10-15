@@ -11,16 +11,24 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 普通电脑上，CLI 跑一条 npm、插件在 VS Code 点更新、Desktop 下载安装就结束。这套环境多了两件事，额外步骤只为它们服务：
 
-- **直连防护**：4 个 Claude 程序各有 WFP 规则（Windows 防火墙底层），按程序路径挡住绕过代理的直连；清单记着每个程序的 SHA-256 指纹，用来发现文件被换。程序一更新，路径或指纹就变，必须把新的登记进防护，否则总检 FAIL、启动器拒绝启动。
+- **直连防护**：4 个 Claude 程序各有 WFP 规则（Windows 防火墙底层），按程序路径挡住绕过代理的直连；清单记着每个程序的 SHA-256 指纹，用来发现文件被换。路径变了（插件、Desktop 换版本目录）规则就挂空，必须迁移；路径不变只是指纹变了（CLI 自更新），规则仍生效，总检、启动器和 Verify 对两个 CLI 目标按有效的 `Anthropic, PBC` 签名放行。
 - **Desktop 禁自动更新**：HKLM 策略关掉了 Desktop 自更新，只能经 43867 下载官方包，先给新版路径加好防护再安装，保证新版第一次启动前就受保护。
 
 除这两件事外不再加步骤。实测受控安装加全部脚本检查约 1.5 分钟；慢通常在下载线路和流程中的人工停顿。
+
+## 先分流：更新后要做什么
+
+| 变化 | 做什么 |
+|---|---|
+| 只有 CLI 变了（自动更新或 npm 安装），Desktop 最新、插件没动 | **不用同步**。查一次版本确认；需要时跑总检，显示「按 Anthropic 签名放行」即正常；维护日志写一行 |
+| 插件在 VS Code 点了更新（换了版本目录），Desktop 最新 | **轻量路径**：快速流程第 1、2 步（一次 UAC）后回读版本；维护日志写一行，不跑 DNS 复核、清理清单 |
+| Desktop 有新版 | 走下面快速流程，收尾照常 |
 
 ## 快速流程（默认走这条）
 
 先装好 CLI 和插件，再跑两条命令完成三端更新，不要读脚本源码，也不要为找参数去通读别的文档：
 
-0. CLI 落后：退出全部 Claude 进程后按「固定来源」表的 CLI 安装命令装指定版本；插件落后：在 VS Code 扩展页点更新，然后退出 VS Code。下面的脚本只登记新指纹，不安装 CLI 或插件。
+0. CLI 落后：退出全部 Claude 进程后按「固定来源」表的 CLI 安装命令装指定版本；插件落后：在 VS Code 扩展页点更新，然后退出 VS Code。下面的脚本只登记新指纹，不安装 CLI 或插件。CLI 自带的自动更新也可以；只有 CLI 变了时 Plan 报 `up_to_date`，`CliSignatureAccepted` 列出按签名放行的目标。
 1. `docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1 -Action Plan`
    一次输出三端版本对比、四个受保护目标的指纹，以及唯一需要执行的那条命令（结果里的 `Command` 字段）；有 claude 进程在跑就报 `blocked_running`，先请用户退出再重跑；CLI 或插件还没装到最新会报 `install_needed`，按 `NextSteps` 做完再重跑（不下载、不改文件）。
 2. 拿到 `plan_ready` 就用 `Command` 字段的值执行（PowerShell 7，全程只弹一次 UAC）；签名、指纹、包身份由脚本强制检查，不再人工逐项复核。成功看 `Status=passed`，明细在 `Maintenance` 给出的 `ResultPath`，各步秒数在该结果的 `StepSeconds`。之后再跑一次 `查询Claude最新版本.ps1`，三端都应是 `up_to_date`，不能只凭 `passed` 判断已升级。
