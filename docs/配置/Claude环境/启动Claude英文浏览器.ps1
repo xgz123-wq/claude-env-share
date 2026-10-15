@@ -155,6 +155,31 @@ function Assert-GuardEvidence {
     return '管理员安装凭证'
 }
 
+# 新版 Claude Desktop 收到关窗信号只会转到后台、不真正退出，残留会挡住下次启动。
+# 所以由本窗口登记一个关窗处理：窗口被关时，把这个路径的 Claude 连同子进程一起结束。
+function Register-ClaudeCloseGuard {
+    param([string]$ExePath)
+    if (-not ('ClaudeCloseGuard' -as [type])) {
+        Add-Type -TypeDefinition @"
+using System; using System.Diagnostics; using System.Runtime.InteropServices;
+public static class ClaudeCloseGuard {
+    delegate bool Handler(int ctrlType);
+    [DllImport("kernel32.dll")] static extern bool SetConsoleCtrlHandler(Handler h, bool add);
+    static Handler keep; static string target;
+    public static void Arm(string path) { target = path; keep = OnCtrl; SetConsoleCtrlHandler(keep, true); }
+    static bool OnCtrl(int ctrlType) {
+        if (ctrlType != 2) return false;
+        foreach (var p in Process.GetProcessesByName("claude")) {
+            try { if (string.Equals(p.MainModule.FileName, target, StringComparison.OrdinalIgnoreCase)) p.Kill(true); } catch {}
+        }
+        return false;
+    }
+}
+"@
+    }
+    [ClaudeCloseGuard]::Arm($ExePath)
+}
+
 function Assert-ClashRoute {
     if (-not (Test-Path -LiteralPath $clashRuntime)) {
         throw '找不到 Clash 当前运行配置。'
@@ -232,8 +257,14 @@ try {
         exit 0
     }
 
+    Register-ClaudeCloseGuard -ExePath $exe
     Start-Process -FilePath $exe -ArgumentList '--lang=en-US','--accept-lang=en-US,en'
     Write-Host '启动前检查全部通过，已启动 Claude 英文浏览器。' -ForegroundColor Green
+    Write-Host '关闭本窗口 = 退出 Claude（连同后台进程一起结束）；从托盘退出 Claude 后本窗口自动关闭。'
+    # 守到 Claude 退出：窗口始终在，关窗处理才有机会执行。
+    while (Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object Path -eq $exe) {
+        Start-Sleep -Seconds 2
+    }
 } catch {
     Write-Host ('[BLOCK] ' + $_.Exception.Message) -ForegroundColor Red
     Write-Host '结论：已拒绝启动 Claude；没有放行真实 IP 直连。' -ForegroundColor Yellow
