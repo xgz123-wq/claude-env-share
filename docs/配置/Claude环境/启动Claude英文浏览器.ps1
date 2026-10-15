@@ -232,8 +232,12 @@ try {
         exit 0
     }
 
+    # Claude（Electron）默认挂到启动它的窗口上，关窗口会连带结束 Claude；设了这个变量就不挂。
+    $env:ELECTRON_NO_ATTACH_CONSOLE = '1'
     Start-Process -FilePath $exe -ArgumentList '--lang=en-US','--accept-lang=en-US,en'
     Write-Host '启动前检查全部通过，已启动 Claude 英文浏览器。' -ForegroundColor Green
+    Write-Host '本窗口 5 秒后自动关闭；提前关掉也不影响 Claude。'
+    Start-Sleep -Seconds 5
 } catch {
     Write-Host ('[BLOCK] ' + $_.Exception.Message) -ForegroundColor Red
     Write-Host '结论：已拒绝启动 Claude；没有放行真实 IP 直连。' -ForegroundColor Yellow
