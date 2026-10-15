@@ -190,8 +190,24 @@ try {
     $exe = Join-Path $package.InstallLocation 'app\Claude.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw '找不到 Claude Desktop 主程序。' }
 
-    $running = @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | Where-Object { $_.ExecutablePath -eq $exe })
-    if ($running.Count) { throw '请先完全退出 Claude Desktop，再使用这个入口。已有进程不会重新加载语言参数。' }
+    $running = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object Path -eq $exe)
+    if ($running.Count) {
+        if ($CheckOnly -or @($running | Where-Object MainWindowHandle -ne 0).Count) {
+            throw '请先完全退出 Claude Desktop，再使用这个入口。已有进程不会重新加载语言参数。'
+        }
+        # 关黑窗口后 Claude 可能没退干净，只剩没有窗口的后台进程，会挡住下一次启动。
+        $kinds = @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | Where-Object ExecutablePath -eq $exe | ForEach-Object {
+            if ($_.CommandLine -match '--type=([\w-]+)') { $Matches[1] } else { 'main' }
+        } | Group-Object | ForEach-Object { "$($_.Name)×$($_.Count)" }) -join '、'
+        Write-Host "发现 Claude Desktop 还有 $($running.Count) 个后台进程（没有窗口），通常是上次关窗口后没退干净：$kinds" -ForegroundColor Yellow
+        $null = Read-Host '按回车结束这些后台进程并继续启动；不想结束就直接关掉本窗口'
+        $running | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        if (@(Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object Path -eq $exe).Count) {
+            throw 'Claude Desktop 后台进程没能全部结束，请从托盘退出或在任务管理器里结束后再试。'
+        }
+        Write-Pass 'Claude Desktop 后台残留已清理'
+    }
 
     $proxy = Get-EffectiveClaudeProxy
     if ($proxy.Value -ne $expectedProxy) {
