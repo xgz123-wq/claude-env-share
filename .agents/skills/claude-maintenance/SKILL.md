@@ -79,7 +79,7 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 | CLI 安装 | `npm install -g @anthropic-ai/claude-code@<版本> --registry https://registry.npmjs.org`；本机默认源若是国内镜像（如 `registry.npmmirror.com`）也不用；不用 `npm update -g` |
 | 受保护的四个程序 | 以 `Desktop防护/应用过滤目标.json` 的 `Targets` 顺序为准：Desktop `claude.exe`、CLI `bin\claude.exe`、CLI 原生包 `claude-code-win32-x64\claude.exe`、VS Code 插件 `resources\native-binary\claude.exe` |
 | 证据与备份 | `%LOCALAPPDATA%\ClaudeNetworkGuard\`；Codex 桌面版（MSIX 打包应用）写的内容实际在 `%LOCALAPPDATA%\Packages\OpenAI.Codex_<发布者哈希>\LocalCache\Local\ClaudeNetworkGuard\` |
-| 安装包缓存 | `%ProgramData%\ClaudeNetworkGuard\`、`…\ClaudeNetworkGuard\Desktop安装包下载\`；更新成功后自动清空 |
+| 安装包缓存 | `%ProgramData%\ClaudeNetworkGuard\`、`…\ClaudeNetworkGuard\Desktop安装包下载\`；更新成功后删旧版本，当前版本留到下次（刚装完删要两分钟左右，见 `Desktop防护/更新维护说明.md`「清理」） |
 
 ## 更新流程
 

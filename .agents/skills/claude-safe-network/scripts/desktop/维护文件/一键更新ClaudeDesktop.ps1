@@ -42,19 +42,21 @@ function Run-Step([string]$Name, [string]$Script, [string[]]$Arguments, [switch]
     if ($script:stepExit -ne 0 -and -not $AllowFailure) { throw ($Name + ' 失败；详情：' + $log) }
     return $output
 }
-function Remove-UsedPackages {
+function Remove-UsedPackages([string]$KeepVersion) {
     # 只删两个固定目录里 Claude-<版本>.msix 形态的安装包；更新成功后它们不再参与恢复或降级。
-    $removed = @(); $errors = @()
+    # 当前已装版本的包留到下次维护再删：刚安装完的包删除很慢（10-14 约 96 秒、10-15 124.9 秒），放凉后约 1 秒。
+    $removed = @(); $kept = @(); $errors = @()
     # Codex 等 MSIX 打包应用发起时，下载目录被重定向到 Packages\<包>\LocalCache\Local，一并清理。
     $directories = @((Join-Path $env:ProgramData 'ClaudeNetworkGuard'),(Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\Desktop安装包下载')) + @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Packages\*\LocalCache\Local\ClaudeNetworkGuard\Desktop安装包下载') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
     foreach ($directory in $directories) {
         if (-not (Test-Path -LiteralPath $directory)) { continue }
         foreach ($file in Get-ChildItem -LiteralPath $directory -File | Where-Object { $_.Name -match '^Claude-(\d+(\.\d+){3}|download-\d{8}-\d{6})\.msix$' }) {
+            if ($KeepVersion -and $file.Name -ieq ('Claude-' + $KeepVersion + '.msix')) { $kept += $file.FullName; continue }
             try { Remove-Item -LiteralPath $file.FullName -Force; $removed += [pscustomobject]@{Path=$file.FullName;SizeMB=[math]::Round($file.Length/1MB,1)} }
             catch { $errors += ($file.FullName + '：' + $_.Exception.Message) }
         }
     }
-    [ordered]@{Removed=$removed;Errors=$errors}
+    [ordered]@{Removed=$removed;Kept=$kept;Errors=$errors}
 }
 try {
     foreach ($value in @($PackagePath,$ApprovedSHA256,$ResumeJournal,$ResultDirectory,$ExpectedUserSid,$PluginApprovedSHA256) + @($CliApprovedSHA256)) { $null = Quote-Literal $value }
@@ -176,9 +178,9 @@ try {
     Assert-Closed
     # 只在全部核验通过后清理；失败时安装包要留给 -ResumeJournal 续接。
     if ($Action -eq 'Update') {
-        # 10-14 这一段从总检结束到写完结果用了 1:36，代码上只是删 3 个文件；单独计时以便定位。
+        # 单独计时：10-14、10-15 删刚装完的包分别耗时约 96 秒、124.9 秒，现在改为保留当前版本。
         $watch = [Diagnostics.Stopwatch]::StartNew()
-        $result.Cleanup = Remove-UsedPackages
+        $result.Cleanup = Remove-UsedPackages -KeepVersion $result.Version
         $result.StepSeconds['安装包清理'] = [math]::Round($watch.Elapsed.TotalSeconds,1)
         if ($result.Cleanup.Errors.Count) { $result.Checks.WARN++ }
     }
