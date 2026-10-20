@@ -19,6 +19,19 @@ function Get-Inspection {
     return ($out | ConvertFrom-Json)
 }
 
+# 取远端文件大小，用于判断续传文件是否已经下满。
+# 只读响应头、不传包体；失败返回 $null，调用方退化为原来的续传行为。
+function Get-RemoteLength {
+    param([string]$Uri, [string]$Proxy)
+    $head = & curl.exe --silent --show-error --location --head --proxy $Proxy `
+        --connect-timeout 20 --max-time 60 $Uri 2>$null
+    if ($LASTEXITCODE -ne 0) { return $null }
+    # 跟随跳转后可能有多段响应头，取最后一段的 Content-Length。
+    $match = @($head | Select-String -Pattern '^\s*content-length:\s*(\d+)\s*$' -CaseSensitive:$false)
+    if ($match.Count -eq 0) { return $null }
+    return [long]$match[-1].Matches[0].Groups[1].Value
+}
+
 $result = [ordered]@{At=(Get-Date -Format o);Status='running';OS=$null;Architecture=$null;InstalledVersion=$null;LatestVersion=$null;SourceUrl=$null;DownloadUrl=$null;PackagePath=$null;SHA256=$null;Signature=$null;NextCommand=$null;Timing=[ordered]@{};Error=$null}
 try {
     if (-not $IsWindows) { throw '本流程只支持 Windows MSIX 安装；macOS 需另行编写。' }
@@ -84,25 +97,52 @@ try {
         } catch { $inspection = $null }
     }
     if (-not $inspection) {
+        if (-not $urlVersion) { throw ('跳转地址里没有版本号，无法命名续传文件：' + $downloadUri.AbsolutePath) }
         # 固定临时名支持失败后断点续传；只有完整包审核通过后才改成 Claude-<版本>.msix。
         $partial = Join-Path $downloadDir ('Claude-' + $urlVersion + '.partial.msix')
-        try {
+        $needDownload = $true
+        $remoteLength = $null
+        # 上次下载可能已经下满、只是没来得及改名就中断；此时再续传必然被服务端回 416。
+        # 所以续传前先比对远端大小：相等就直接进审核，变大就删掉重下。
+        if (Test-Path -LiteralPath $partial) {
+            $localLength = (Get-Item -LiteralPath $partial).Length
+            $remoteLength = Get-RemoteLength -Uri $downloadUri.AbsoluteUri -Proxy $Proxy
+            if ($remoteLength) {
+                if ($localLength -eq $remoteLength) {
+                    $needDownload = $false
+                    $result.Timing.ResumeSkipped = "续传文件已与远端等长（$localLength 字节），跳过下载直接审核"
+                } elseif ($localLength -gt $remoteLength) {
+                    Remove-Item -LiteralPath $partial -Force
+                    $result.Timing.PartialReset = "续传文件 $localLength 字节大于远端 $remoteLength 字节，已删除重下"
+                }
+            }
+        }
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        if ($needDownload) {
             # Invoke-WebRequest 的 TimeoutSec 是总超时，服务端未开始传输时会让 0 字节文件空等 30 分钟。
             # curl 断线后重试并从已有字节继续；连续 20 秒低于 100 KiB/s 就断开重连（正常约 2 MB/s）。
-            # 旧门槛 1 KiB/s 判不出慢线路：10-14 前 2.5 分钟只有约 86 KB/s 却一直不重连。
-            $watch = [Diagnostics.Stopwatch]::StartNew()
+            # 旧门槛 1 KiB/s 判不出慢线路：10-14 前 2.5 分钟只有约 86 KB/s 却一直重连不上。
             & curl.exe --fail --location --silent --show-error --proxy $Proxy `
                 --connect-timeout 20 --speed-limit 102400 --speed-time 20 `
                 --continue-at - --retry 10 --retry-all-errors --retry-delay 2 `
                 --output $partial $downloadUri.AbsoluteUri
-            if ($LASTEXITCODE -ne 0) { throw ('Desktop 安装包下载失败，curl 退出码：' + $LASTEXITCODE + '；已下部分保留，重跑会续传。') }
-            $result.Timing.DownloadSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
-            $watch.Restart()
-            $inspection = Get-Inspection -Path $partial
-            $result.Timing.InspectSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
-        } catch {
-            throw
+            $curlExit = $LASTEXITCODE
+        } else { $curlExit = 0 }
+        $result.Timing.DownloadSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
+        if ($curlExit -ne 0) {
+            # 416 与其它错误都可能出现在“文件其实已完整”的情况下：按远端大小复核一次，完整就继续审核，不再报失败。
+            $nowLength = if (Test-Path -LiteralPath $partial) { (Get-Item -LiteralPath $partial).Length } else { 0 }
+            if (-not $remoteLength) { $remoteLength = Get-RemoteLength -Uri $downloadUri.AbsoluteUri -Proxy $Proxy }
+            if ($remoteLength -and $nowLength -eq $remoteLength) {
+                $result.Timing.DownloadRecovered = "curl 退出码 $curlExit，但本地文件已与远端等长（$nowLength 字节），按完整包继续审核"
+            } else {
+                $remoteText = if ($remoteLength) { "$remoteLength 字节" } else { '未知' }
+                throw ('Desktop 安装包下载失败，curl 退出码：' + $curlExit + "；本地 $nowLength 字节 / 远端 $remoteText 字节。已下部分保留，重跑会续传。")
+            }
         }
+        $watch.Restart()
+        $inspection = Get-Inspection -Path $partial
+        $result.Timing.InspectSeconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
         $final = Join-Path $downloadDir ('Claude-' + $inspection.NewVersion + '.msix')
         Move-Item -LiteralPath $partial -Destination $final -Force
         if ((Get-FileHash -LiteralPath $final).Hash -ne $inspection.SHA256) { throw '改名后安装包哈希变化。' }
