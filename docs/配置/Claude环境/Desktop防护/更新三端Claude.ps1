@@ -27,9 +27,15 @@ function Mark-Time { param([string]$Name) $result.Timing[$Name] = [math]::Round(
 # 子脚本用 pwsh 7 独立进程调用：脚本内部有 exit，直接调用会提前终止本编排器。
 function Invoke-ChildJson {
     param([string]$FileName, [string[]]$Arguments = @())
-    $raw = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot $FileName) @Arguments 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { throw ($FileName + ' 失败：' + $raw.Trim()) }
-    return ($raw | ConvertFrom-Json)
+    $stderrPath = [IO.Path]::GetTempFileName()
+    try {
+        $raw = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot $FileName) @Arguments 2> $stderrPath | Out-String
+        $stderr = Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue
+        if ($LASTEXITCODE -ne 0) { throw ($FileName + ' 失败：' + ($raw + $stderr).Trim()) }
+        return ($raw | ConvertFrom-Json)
+    } finally {
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 try {
