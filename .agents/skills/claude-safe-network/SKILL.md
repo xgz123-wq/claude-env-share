@@ -208,7 +208,7 @@ pwsh -File scripts\Invoke-ClaudeSafetyCheck.ps1
 ### 场景 C：Claude Desktop 更新
 
 - **入口**：用户说“读取 Docs 配置总览，更新 Claude Desktop”时，按 [claude-maintenance](../claude-maintenance/SKILL.md) 执行，Desktop 细则见 `docs/配置/Claude环境/Desktop防护/更新维护说明.md`。
-- **执行**：先用 Docs 真源中的 `下载ClaudeDesktop官方包.ps1` 下载并审核，再用 `一键更新ClaudeDesktop.ps1` 更新；CLI 指纹刷新也通过它的 `-CliApprovedSHA256` 完成，管理员工作集中在一次授权中。
+- **执行**：Docs 真源的 `更新三端Claude.ps1`（桌面「Claude-三端更新」）一次做完下载审核、指纹登记并调用 `一键更新ClaudeDesktop.ps1`；CLI 指纹刷新通过它的 `-CliApprovedSHA256` 完成，管理员工作集中在一次授权中。
 - **启动**：默认不打开 Desktop、Code、浏览器或探针。
 - **顺序**：先保护新版路径，再注册新版，最后检查并同步记录。
 - **限制**：保持当前路线；失败后保留现场，不反复提权试验。

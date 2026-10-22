@@ -6,7 +6,9 @@ param(
     # 人工审核整个包及声明后，传入 Inspect 输出的 SHA256；不会自行提权。
     [string]$ApprovedSHA256,
     # 注册前失败时复用日志内已生效的新规则；禁止重复添加孤立规则。
-    [string]$ResumeJournal
+    [string]$ResumeJournal,
+    # Inspect 结果另存一份到这个文件，调用方读文件而不是解析屏幕输出。
+    [string]$ResultPath
 )
 $ErrorActionPreference = 'Stop'
 $helper = Join-Path $PSScriptRoot '应用直连过滤.cs'
@@ -98,7 +100,12 @@ try {
     $newVersion = [version]$identity.GetAttribute('Version')
     if ($newVersion -lt [version]$current.Version) { throw '拒绝降级。' }
     $inspection = [ordered]@{Path=$PackagePath;SHA256=$packageHash;Signature=$packageSignature;OldVersion=[string]$current.Version;NewVersion=[string]$newVersion;PackageFamily=$current.PackageFamilyName;Identity=$identity.OuterXml;Applications=($applications | ForEach-Object {$_.OuterXml});Dependencies=$xml.SelectSingleNode('/*[local-name()="Package"]/*[local-name()="Dependencies"]').OuterXml;Extensions=@($xml.SelectNodes('//*[local-name()="Extension"]') | ForEach-Object {$_.OuterXml});Capabilities=$xml.SelectSingleNode('/*[local-name()="Package"]/*[local-name()="Capabilities"]').OuterXml}
-    if ($Action -eq 'Inspect') { $inspection | ConvertTo-Json -Depth 12; exit 0 }
+    if ($Action -eq 'Inspect') {
+        $json = $inspection | ConvertTo-Json -Depth 12
+        if ($ResultPath) { Set-Content -LiteralPath $ResultPath -Value $json -Encoding utf8 }
+        $json
+        exit 0
+    }
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Apply 必须在管理员 PowerShell 中执行。' }
     if ($ApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$' -or $ApprovedSHA256 -ne $packageHash) { throw 'ApprovedSHA256 必须匹配人工审核后的完整包。' }
     if ($newVersion -eq [version]$current.Version) { throw '已是此版本，无需执行更新；请运行现有 Verify。' }

@@ -77,7 +77,7 @@ try {
     if ($Action -eq 'Update') {
         if (-not $PackagePath -and -not $CliApprovedSHA256 -and -not $PluginApprovedSHA256) { throw 'Update 至少要提供 Desktop 安装包（PackagePath + ApprovedSHA256）、CliApprovedSHA256 或 PluginApprovedSHA256。' }
         if ($PackagePath) {
-            if ($ApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw '更新前必须提供已审核的官方 MSIX 路径和 ApprovedSHA256；先用 下载ClaudeDesktop官方包.ps1 下载并审核。' }
+            if ($ApprovedSHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw '更新前必须提供已审核的官方 MSIX 路径和 ApprovedSHA256；由 更新三端Claude.ps1 下载审核后传入。' }
             $PackagePath = (Resolve-Path -LiteralPath $PackagePath).Path
             if ([IO.Path]::GetExtension($PackagePath) -ine '.msix' -or (Get-FileHash -LiteralPath $PackagePath).Hash -ne $ApprovedSHA256) { throw '安装包类型或审核哈希不符。' }
         }
@@ -138,7 +138,10 @@ try {
         $null = Run-Step 'CLI指纹刷新' $null @('-EncodedCommand',$refreshEncoded)
     }
     if ($Action -eq 'Update' -and $PackagePath) {
-        $inspection = Run-Step '安装包检查' $updater @('-Action','Inspect','-PackagePath',$PackagePath) | ConvertFrom-Json
+        # 结果读文件：屏幕输出里混进任何警告都会让 ConvertFrom-Json 失败。
+        $inspectPath = Join-Path $ResultDirectory '安装包检查.json'
+        $null = Run-Step '安装包检查' $updater @('-Action','Inspect','-PackagePath',$PackagePath,'-ResultPath',$inspectPath)
+        $inspection = Get-Content -LiteralPath $inspectPath -Raw | ConvertFrom-Json
         if ($inspection.SHA256 -ne $ApprovedSHA256 -or $inspection.OldVersion -ne $result.Version) { throw '包检查结果与审核哈希或当前版本不符。' }
         if ([version]$inspection.NewVersion -ne [version]$result.Version) {
             $cache = Join-Path $env:ProgramData 'ClaudeNetworkGuard'

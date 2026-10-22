@@ -2,7 +2,7 @@
 # 清理 ClaudeNetworkGuard 下的过期维护残留：改前备份、更新日志目录、遗留安装包。
 # 默认只列清单不删除；加 -Yes 才删除。每次维护收尾跑一次 dry-run，经用户确认后再加 -Yes。
 # 规则：名称带 yyyyMMdd 日期且距今 >= KeepDays 天的目录/文件删除；
-#       受控更新-*、统一维护-*、基线刷新备份-* 每个位置各保留最新一个，作为最近一次更新的证据；
+#       更新记录-*、受控更新-*、统一维护-*、基线刷新备份-* 每个位置各保留最新一个，作为最近一次更新的证据；
 #       claude-network-probe.exe 和不带日期的项目永不处理。
 [CmdletBinding()]
 param(
@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $today = (Get-Date).Date
 # Codex 等 MSIX 打包应用写 %LOCALAPPDATA% 会被重定向到 Packages\<包>\LocalCache\Local，两处都要清。
 $roots = @(Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard') + @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Packages\*\LocalCache\Local\ClaudeNetworkGuard') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
-$keepLatest = @('受控更新','统一维护','基线刷新备份')
+$keepLatest = @('更新记录','受控更新','统一维护','基线刷新备份')
 $candidates = @()
 foreach ($root in @($roots | Where-Object { Test-Path -LiteralPath $_ })) {
     $items = @(Get-ChildItem -LiteralPath $root -Force | Where-Object { $_.Name -ne 'claude-network-probe.exe' } | ForEach-Object {

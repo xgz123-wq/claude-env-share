@@ -387,7 +387,7 @@ $baselineLnks = @(if (Test-Path -LiteralPath $baselineDir) {
 $declared = @($Topology.DesktopShortcuts)
 $missingBaseline = @($declared | Where-Object { $baselineLnks.Name -notcontains $_.Name })
 if ($baselineLnks.Count -ge 5 -and $missingBaseline.Count -eq 0) {
-    Add-CheckResult -Status 'PASS' -Item 'assets\shortcuts' -Evidence "$($baselineLnks.Count) 个原版 .lnk 备份在位（3 个脚本类 + 2 个浏览器类），可作为还原源"
+    Add-CheckResult -Status 'PASS' -Item 'assets\shortcuts' -Evidence "$($baselineLnks.Count) 个原版 .lnk 备份在位（4 个脚本类 + 2 个浏览器类），可作为还原源"
 }
 else {
     Add-CheckResult -Status 'WARN' -Item 'assets\shortcuts' `
