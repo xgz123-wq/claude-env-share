@@ -4,7 +4,7 @@
 # -Action Check：只查版本和指纹，不下载、不提权、不改文件，Claude 开着也能跑。
 # 插件落后仍要用户在 VS Code 扩展页点更新后重跑：VS Code 命令行装插件没实测过，不加没测过的分支。
 # 子脚本的结果一律走文件，屏幕输出只进日志；10-22 之前把屏幕文字当 JSON 解析，curl 的一行报错就让流程假失败。
-# 下载不做跨次续传：没下完的临时文件直接删掉重下；10-20 的 416 续传分支就是为跨次续传存在的，删掉后不再有这条分支。
+# 下载不做跨次续传：没下完的临时文件（Claude-<版本>-下载中.msix）直接删掉重下；10-20 的 416 续传分支就是为跨次续传存在的，删掉后不再有这条分支。
 # 安全边界：文件指纹与清单不同时必须带有效 Anthropic 签名；不结束进程、不改策略、不启动 Claude。
 [CmdletBinding()]
 param(
@@ -139,20 +139,30 @@ function Get-DesktopPackage([string]$Version, [string]$Url) {
         Remove-Item -LiteralPath $final -Force
     }
     # 不做跨次续传：上次没下完的临时文件直接删掉重下；curl 自己的重试仍从已下字节继续。
-    $temp = Join-Path $directory ('Claude-' + $Version + '.downloading')
+    # 临时文件也必须以 .msix 结尾：审核只认 .msix，10-23 用 .downloading 结尾导致下载完整却审核失败。
+    $temp = Join-Path $directory ('Claude-' + $Version + '-下载中.msix')
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
     $curlLog = Join-Path $runDir '下载.log'
     Say ('下载 Claude Desktop ' + $Version + '（约 300 MB）…')
     $watch = [Diagnostics.Stopwatch]::StartNew()
     # 连续 20 秒低于 100 KiB/s 就断开重连（正常约 2 MB/s；旧门槛 1 KiB/s 判不出慢线路）。
-    & curl.exe --fail --location --silent --show-error --proxy $Proxy `
-        --connect-timeout 20 --speed-limit 102400 --speed-time 20 `
-        --continue-at - --retry 10 --retry-all-errors --retry-delay 2 `
-        --output $temp $Url 2> $curlLog
+    # curl 在后台下载、报错进日志；前台每秒按临时文件大小刷新一行进度。
+    $curlArgs = @('--fail', '--location', '--silent', '--show-error', '--proxy', $Proxy,
+        '--connect-timeout', '20', '--speed-limit', '102400', '--speed-time', '20',
+        '--continue-at', '-', '--retry', '10', '--retry-all-errors', '--retry-delay', '2',
+        '--output', ('"' + $temp + '"'), ('"' + $Url + '"'))
+    $curl = Start-Process -FilePath 'curl.exe' -ArgumentList $curlArgs -NoNewWindow -PassThru -RedirectStandardError $curlLog
+    $null = $curl.Handle  # 先拿住句柄，进程结束后才读得到 ExitCode
+    while (-not $curl.WaitForExit(1000)) {
+        $mb = if (Test-Path -LiteralPath $temp) { (Get-Item -LiteralPath $temp).Length / 1MB } else { 0 }
+        $elapsed = $watch.Elapsed.TotalSeconds
+        [Console]::Write(("`r  已下载 {0,4:N0} MB / 约 300 MB   平均 {1,4:N1} MB/s   已用 {2,4:N0} 秒   " -f $mb, ($mb / [math]::Max($elapsed, 1)), $elapsed))
+    }
+    [Console]::WriteLine()
     $seconds = [math]::Round($watch.Elapsed.TotalSeconds, 1)
-    if ($LASTEXITCODE -ne 0) {
+    if ($curl.ExitCode -ne 0) {
         Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
-        throw ('Desktop 安装包下载失败，curl 退出码 ' + $LASTEXITCODE + '；未完成文件已删除，重跑会整包重下。日志：' + $curlLog)
+        throw ('Desktop 安装包下载失败，curl 退出码 ' + $curl.ExitCode + '；未完成文件已删除，重跑会整包重下。日志：' + $curlLog)
     }
     Invoke-Child '安装包审核' @('-File', $updater, '-Action', 'Inspect', '-PackagePath', $temp, '-ResultPath', $inspectPath) (Join-Path $runDir '安装包审核.log')
     $inspection = Get-Content -LiteralPath $inspectPath -Raw | ConvertFrom-Json
