@@ -290,7 +290,21 @@ try {
     Save-Record
     Say '开始更新：接下来会弹一次 UAC，请点「是」…'
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    Invoke-Child '一键更新' @('-EncodedCommand', $encoded) (Join-Path $runDir '一键更新.log')
+    # 管理员进程在隐藏窗口里跑，每步开始、结束写一行 进度.log；这里每秒把新的整行转印到屏幕。
+    $maintainLog = Join-Path $runDir '一键更新.log'
+    $maintain = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $encoded) `
+        -NoNewWindow -PassThru -RedirectStandardOutput $maintainLog -RedirectStandardError (Join-Path $runDir '一键更新-错误.log')
+    $null = $maintain.Handle  # 先拿住句柄，进程结束后才读得到 ExitCode
+    $progressPath = Join-Path $resultDirectory '进度.log'
+    $shown = 0
+    do {
+        $exited = $maintain.WaitForExit(1000)
+        $raw = try { Get-Content -LiteralPath $progressPath -Raw -Encoding utf8 -ErrorAction Stop } catch { '' }
+        # 最后一段可能是没写完的半行，只转印换行符之前的完整行。
+        $lines = @(([string]$raw) -split '\r?\n')
+        for (; $shown -lt $lines.Count - 1; $shown++) { Say ('  UAC 内 ' + $lines[$shown]) }
+    } until ($exited)
+    if ($maintain.ExitCode -ne 0) { throw ('一键更新 失败，退出码 ' + $maintain.ExitCode + '；日志：' + $maintainLog) }
     $saved = Get-Content -LiteralPath (Join-Path $resultDirectory '结果.json') -Raw | ConvertFrom-Json
     if ($saved.Status -notin @('passed', 'passed_with_warnings')) { throw ('一键更新未通过：' + $saved.Error) }
     $record.Maintenance = [ordered]@{ ResultPath = (Join-Path $resultDirectory '结果.json'); Status = $saved.Status; Version = $saved.Version; HashCount = $saved.HashCount; FiltersCount = $saved.FiltersCount; StepSeconds = $saved.StepSeconds; Checks = $saved.Checks; Cleanup = $saved.Cleanup }

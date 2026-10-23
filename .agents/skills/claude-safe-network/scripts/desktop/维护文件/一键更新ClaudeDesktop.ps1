@@ -28,15 +28,21 @@ function Quote-Literal([string]$Value) {
     if ($Value -match '[\r\n\x00]') { throw '参数不能包含换行或空字符。' }
     "'" + $Value.Replace("'", "''") + "'"
 }
+# 管理员进程跑在隐藏窗口里；每步开始、结束往 进度.log 追加一行，由 更新三端Claude.ps1 转印到屏幕。写失败不影响维护。
+function Write-StepProgress([string]$Text) {
+    try { Add-Content -LiteralPath (Join-Path $ResultDirectory '进度.log') -Value $Text -Encoding utf8 } catch { }
+}
 function Run-Step([string]$Name, [string]$Script, [string[]]$Arguments, [switch]$AllowFailure) {
     $log = Join-Path $ResultDirectory ($Name + '.log')
     $result.Logs += $log
     # Script 为空时 Arguments 自带 -EncodedCommand，用于要传数组参数的步骤。
     $invoke = if ($Script) { @('-File',$Script) + $Arguments } else { $Arguments }
+    Write-StepProgress ('开始 ' + $Name)
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $output = & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive @invoke 2>&1 | Out-String
     $script:stepExit = $LASTEXITCODE
     $result.StepSeconds[$Name] = [math]::Round($watch.Elapsed.TotalSeconds,1)
+    Write-StepProgress ($(if ($script:stepExit -eq 0) { '完成 ' } else { '失败 ' }) + $Name + '（' + $result.StepSeconds[$Name] + ' 秒）')
     $output | Set-Content -LiteralPath $log -Encoding utf8
     Save-Result
     if ($script:stepExit -ne 0 -and -not $AllowFailure) { throw ($Name + ' 失败；详情：' + $log) }
@@ -44,14 +50,17 @@ function Run-Step([string]$Name, [string]$Script, [string[]]$Arguments, [switch]
 }
 function Remove-UsedPackages([string]$KeepVersion) {
     # 只删两个固定目录里 Claude-<版本>.msix 形态的安装包；更新成功后它们不再参与恢复或降级。
-    # 当前已装版本的包留到下次维护再删：刚安装完的包删除很慢（10-14 约 96 秒、10-15 124.9 秒），放凉后约 1 秒。
+    # 每个目录保留版本最高的两个包（刚装的新版和刚被替换的旧版），只删更老的：
+    # 刚参与安装的包删除很慢（10-14 约 96 秒、10-15 124.9 秒、10-23 删刚被替换的旧版 175.8 秒），放凉后约 1 秒。
     $removed = @(); $kept = @(); $errors = @()
     # Codex 等 MSIX 打包应用发起时，下载目录被重定向到 Packages\<包>\LocalCache\Local，一并清理。
     $directories = @((Join-Path $env:ProgramData 'ClaudeNetworkGuard'),(Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\Desktop安装包下载')) + @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Packages\*\LocalCache\Local\ClaudeNetworkGuard\Desktop安装包下载') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
     foreach ($directory in $directories) {
         if (-not (Test-Path -LiteralPath $directory)) { continue }
-        foreach ($file in Get-ChildItem -LiteralPath $directory -File | Where-Object { $_.Name -match '^Claude-(\d+(\.\d+){3}|download-\d{8}-\d{6})\.msix$' }) {
-            if ($KeepVersion -and $file.Name -ieq ('Claude-' + $KeepVersion + '.msix')) { $kept += $file.FullName; continue }
+        $files = @(Get-ChildItem -LiteralPath $directory -File | Where-Object { $_.Name -match '^Claude-(\d+(\.\d+){3}|download-\d{8}-\d{6})\.msix$' })
+        $newest = @($files | Where-Object { $_.Name -match '^Claude-\d+(\.\d+){3}\.msix$' } | Sort-Object { [version]($_.BaseName -replace '^Claude-') } -Descending | Select-Object -First 2 | ForEach-Object Name)
+        foreach ($file in $files) {
+            if ($file.Name -in $newest -or ($KeepVersion -and $file.Name -ieq ('Claude-' + $KeepVersion + '.msix'))) { $kept += $file.FullName; continue }
             try { Remove-Item -LiteralPath $file.FullName -Force; $removed += [pscustomobject]@{Path=$file.FullName;SizeMB=[math]::Round($file.Length/1MB,1)} }
             catch { $errors += ($file.FullName + '：' + $_.Exception.Message) }
         }
@@ -181,10 +190,12 @@ try {
     Assert-Closed
     # 只在全部核验通过后清理；失败时安装包要留给 -ResumeJournal 续接。
     if ($Action -eq 'Update') {
-        # 单独计时：10-14、10-15 删刚装完的包分别耗时约 96 秒、124.9 秒，现在改为保留当前版本。
+        # 单独计时：刚参与安装的包删得慢，现在每个目录保留最新两个版本，只删更老的。
+        Write-StepProgress '开始 安装包清理'
         $watch = [Diagnostics.Stopwatch]::StartNew()
         $result.Cleanup = Remove-UsedPackages -KeepVersion $result.Version
         $result.StepSeconds['安装包清理'] = [math]::Round($watch.Elapsed.TotalSeconds,1)
+        Write-StepProgress ('完成 安装包清理（' + $result.StepSeconds['安装包清理'] + ' 秒）')
         if ($result.Cleanup.Errors.Count) { $result.Checks.WARN++ }
     }
     $result.Status = if ($result.Checks.WARN -gt 0) { 'passed_with_warnings' } else { 'passed' }
