@@ -2,7 +2,9 @@
 param(
   [switch] $OpenBrowser,
   # Guard：只查 Desktop 策略与直连防护，供一键更新在 UAC 内复核这次动过的项；默认 All 与原来一致。
-  [ValidateSet('All','Guard')][string] $Scope = 'All'
+  [ValidateSet('All','Guard')][string] $Scope = 'All',
+  # 环境卫士「深度总检」按钮用：结果另写一份 JSON（字段同 Skill 版 -Json）；不传时行为不变。
+  [string] $ResultPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -337,6 +339,23 @@ if ($Scope -eq 'All') {
 }
 
 Add-Result MANUAL '网页最终验收' '专用 Chrome / Desktop 内置浏览器分别确认：Claude IP、DNS、WebRTC、IPv6、语言和时区全绿'
+
+# 写给环境卫士的结果文件：屏幕输出照旧，另存一份机器可读的。
+if ($ResultPath) {
+  $resultFail = @($results | Where-Object Status -eq 'FAIL').Count
+  $null = New-Item -ItemType Directory -Path (Split-Path -Parent ([IO.Path]::GetFullPath($ResultPath))) -Force
+  [pscustomobject]@{
+    script  = 'Claude环境一键总检.ps1'
+    time    = (Get-Date -Format 'o')
+    scope   = $Scope
+    ok      = ($resultFail -eq 0)
+    pass    = @($results | Where-Object Status -eq 'PASS').Count
+    warn    = @($results | Where-Object Status -eq 'WARN').Count
+    fail    = $resultFail
+    manual  = @($results | Where-Object Status -eq 'MANUAL').Count
+    results = $results
+  } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ResultPath -Encoding utf8
+}
 
 Write-Host ''
 foreach ($row in $results) {
