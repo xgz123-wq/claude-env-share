@@ -2,7 +2,7 @@
 # 三端更新一键入口：退出 Claude 后运行，一次做完「查三端版本 → CLI 落后就 npm 装 → Desktop 落后就下载官方包并审核
 # → 登记 4 个受保护程序的指纹 → 一次 UAC 完成插件迁移、指纹刷新、Desktop 安装、管理员 Verify、总检、安装包清理」。
 # -Action Check：只查版本和指纹，不下载、不提权、不改文件，Claude 开着也能跑。
-# 插件落后仍要用户在 VS Code 扩展页点更新后重跑：VS Code 命令行装插件没实测过，不加没测过的分支。
+# 插件落后时用 VS Code 命令行装指定版本（10-24 实测：pinned、targetPlatform 都不变）；VS Code 开着就停下让用户退出，不强杀。
 # 子脚本的结果一律走文件，屏幕输出只进日志；10-22 之前把屏幕文字当 JSON 解析，curl 的一行报错就让流程假失败。
 # 下载不做跨次续传：没下完的临时文件（Claude-<版本>-下载中.msix）直接删掉重下；10-20 的 416 续传分支就是为跨次续传存在的，删掉后不再有这条分支。
 # 安全边界：文件指纹与清单不同时必须带有效 Anthropic 签名；不结束进程、不改策略、不启动 Claude。
@@ -120,6 +120,26 @@ function Get-PluginInstalled {
     $root = [string]$records[0].location.path
     if ($root -match '^/([A-Za-z]:/.*)$') { $root = $Matches[1] }
     return [pscustomobject]@{ Version = [string]$records[0].version; Exe = (Join-Path $root.Replace('/', '\') 'resources\native-binary\claude.exe') }
+}
+# 装插件后校验 extensions.json：只登记一条、版本对、pinned=true、targetPlatform=win32-x64；返回不合格的原因，合格返回空。
+function Test-PluginRegistration([string]$Registry, [string]$Version) {
+    $records = @((Get-Content -LiteralPath $Registry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
+    if ($records.Count -ne 1) { return ('登记了 ' + $records.Count + ' 条，预期 1 条') }
+    $item = $records[0]
+    if ([string]$item.version -ne $Version) { return ('版本是 ' + $item.version + '，预期 ' + $Version) }
+    if ($item.metadata.pinned -ne $true) { return 'pinned 不是 true（VS Code 会自动更新插件）' }
+    if ([string]$item.metadata.targetPlatform -ne 'win32-x64') { return ('targetPlatform 是 ' + $item.metadata.targetPlatform + '，预期 win32-x64') }
+    return $null
+}
+function Get-VsCodeCli {
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\bin\code.cmd'),
+        (Join-Path $env:ProgramFiles 'Microsoft VS Code\bin\code.cmd')
+    )
+    $found = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $found) { $found = (Get-Command code.cmd -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
+    if (-not $found) { throw '没有找到 VS Code 命令行 code.cmd；请在 VS Code 扩展页手动更新插件，退出 VS Code 后重跑。' }
+    return $found
 }
 function Get-PluginLatest {
     $body = '{"filters":[{"criteria":[{"filterType":7,"value":"anthropic.claude-code"}]}],"flags":16}'
@@ -272,13 +292,18 @@ try {
         Say $record.Error
         exit 1
     }
-    if ($record.Products[2].Status -eq 'update_available') {
-        # 插件只走 VS Code 官方入口；pinned=true 关掉了它的自动更新，所以要用户点一下。
-        $record.Status = 'plugin_update_needed'
-        $record.Error = '插件 ' + $plugin.Version + ' → ' + $pluginLatest + '：请在 VS Code 扩展页点「更新」，退出 VS Code，再重跑本脚本。本次没有下载、没有改任何文件。'
-        Save-Record
-        Say $record.Error
-        exit 1
+    $pluginBehind = $record.Products[2].Status -eq 'update_available'
+    if ($pluginBehind) {
+        # 装插件和随后的规则迁移都要求 VS Code 已退出；在跑就停下，不强杀。
+        $codeRunning = @(Get-CimInstance Win32_Process -Filter "Name='Code.exe'" | Select-Object ProcessId, ExecutablePath)
+        if ($codeRunning.Count) {
+            $record.RunningProcesses = $codeRunning
+            $record.Status = 'blocked_vscode'
+            $record.Error = '插件 ' + $plugin.Version + ' → ' + $pluginLatest + ' 要先退出 VS Code（全部窗口）再重跑。本次没有下载、没有改任何文件。'
+            Save-Record
+            Say $record.Error
+            exit 1
+        }
     }
     if ($record.Products[1].Status -eq 'update_available') {
         Say ('安装 CLI ' + $cliInstalled + ' → ' + $cliLatest + '（npm，约 1 分钟）…')
@@ -290,6 +315,27 @@ try {
         $record.CliInstall = [ordered]@{ From = $cliInstalled; To = $cliNow; Log = $npmLog }
         $record.Products[1].Installed = $cliNow; $record.Products[1].Status = 'up_to_date'
         Mark-Time 'CLI安装'
+    }
+
+    if ($pluginBehind) {
+        # 插件只走 VS Code 官方市场：用 VS Code 自己的命令行装指定版本，装完核对登记；不合格就用装之前的 extensions.json 恢复。
+        $registry = Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
+        $registryBackup = Join-Path $runDir 'extensions-装插件前.json'
+        Copy-Item -LiteralPath $registry -Destination $registryBackup -Force
+        $codeCli = Get-VsCodeCli
+        $pluginLog = Join-Path $runDir '插件安装.log'
+        Say ('安装插件 ' + $plugin.Version + ' → ' + $pluginLatest + '（VS Code 命令行，约 30 秒）…')
+        & $codeCli --install-extension ('anthropic.claude-code@' + $pluginLatest) *> $pluginLog
+        $codeExit = $LASTEXITCODE
+        $problem = if ($codeExit -ne 0) { 'code --install-extension 退出码 ' + $codeExit } else { Test-PluginRegistration $registry $pluginLatest }
+        $record.PluginInstall = [ordered]@{ From = $plugin.Version; To = $pluginLatest; Log = $pluginLog; Backup = $registryBackup; Problem = $problem }
+        if ($problem) {
+            Copy-Item -LiteralPath $registryBackup -Destination $registry -Force
+            throw ('插件安装后核对不通过（' + $problem + '），已用装之前的 extensions.json 恢复；日志：' + $pluginLog)
+        }
+        $plugin = Get-PluginInstalled
+        $record.Products[2].Installed = $plugin.Version; $record.Products[2].Status = 'up_to_date'
+        Mark-Time '插件安装'
     }
 
     $desktopBehind = $record.Products[0].Status -eq 'update_available'
@@ -370,6 +416,7 @@ try {
     }
     if ($desktopBehind -and $record.After.Desktop -ne $package.NewVersion) { throw ('更新后 Desktop 版本回读为 ' + $record.After.Desktop + '，预期 ' + $package.NewVersion) }
     if (-not $record.After.PluginProtected) { throw '更新后插件路径仍不在防护清单里。' }
+    if ($pluginBehind -and $record.After.Plugin -ne $pluginLatest) { throw ('更新后插件版本回读为 ' + $record.After.Plugin + '，预期 ' + $pluginLatest) }
     $record.Status = 'passed'
     Mark-Time '完成'
 
