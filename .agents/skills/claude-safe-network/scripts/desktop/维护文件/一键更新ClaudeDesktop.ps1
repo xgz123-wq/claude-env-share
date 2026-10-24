@@ -11,7 +11,9 @@ param(
     [string]$ResumeJournal,
     [switch]$Worker,
     [string]$ResultDirectory,
-    [string]$ExpectedUserSid
+    [string]$ExpectedUserSid,
+    # 日常总检只查这次更新动过的项（Desktop 策略与直连防护，总检 -Scope Guard）；不传时照旧全量总检。由环境卫士经 更新三端Claude.ps1 传入。
+    [switch]$ChangedOnly
 )
 $ErrorActionPreference = 'Stop'
 $PSStyle.OutputRendering = 'PlainText'
@@ -107,6 +109,7 @@ try {
             if ($item.Value) { $command += ' -' + $item.Key + ' ' + (Quote-Literal $item.Value) }
         }
         if ($CliApprovedSHA256) { $command += ' -CliApprovedSHA256 ' + ((@($CliApprovedSHA256) | ForEach-Object { Quote-Literal $_ }) -join ',') }
+        if ($ChangedOnly) { $command += ' -ChangedOnly' }
         $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
         try { $child = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand',$encoded) -Verb RunAs -WindowStyle Hidden -PassThru }
         catch { throw ('管理员授权被取消或无法启动；未重试提权。' + $_.Exception.Message) }
@@ -181,7 +184,10 @@ try {
         if ((Get-FileHash -LiteralPath $from).Hash -ne (Get-FileHash -LiteralPath $to).Hash) { throw ('维护副本不同步：' + $name) }
         $result.SynchronizedFiles += $name
     }
-    $summary = Run-Step '日常总检' (Join-Path $root.FullName 'Docs\配置\Claude环境\Claude环境一键总检.ps1') @() -AllowFailure
+    $summaryArgs = @()
+    if ($ChangedOnly) { $summaryArgs = @('-Scope','Guard') }
+    $result.SummaryScope = if ($ChangedOnly) { 'Guard' } else { 'All' }
+    $summary = Run-Step '日常总检' (Join-Path $root.FullName 'Docs\配置\Claude环境\Claude环境一键总检.ps1') $summaryArgs -AllowFailure
     $summaryExit = $script:stepExit
     $result.Checks = [ordered]@{PASS=0;WARN=0;FAIL=0;MANUAL=0}
     foreach ($label in @('PASS','WARN','FAIL','MANUAL')) { $result.Checks[$label] = [regex]::Matches($summary, ('(?m)^\[' + $label + '\s*\]')).Count }

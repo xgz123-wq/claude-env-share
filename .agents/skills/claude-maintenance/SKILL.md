@@ -31,7 +31,7 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 0. 插件落后：在 VS Code 扩展页点更新，然后退出 VS Code；这是唯一的手动步骤。CLI 落后不用管，第 2 步脚本自己按「固定来源」表的命令装。CLI 自带的自动更新也可以；只有 CLI 变了时第 2 步报 `up_to_date`，总检按签名放行。
 1. `docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1 -Action Check`（只读，Claude 开着也能跑）
    输出三端已装 / 最新版本和四个受保护目标的指纹状态（`unchanged` / `changed_signed` / `moved` 等）。
-2. 退出全部 Claude（Desktop、VS Code 插件会话、CLI）后跑 `docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1`（不带参数；可做成桌面快捷方式）。脚本依次：查版本 → CLI 落后就 npm 装 → Desktop 落后就下载官方包并审核（同版本审核过的包直接复用）→ 登记四个目标指纹 → 弹一次 UAC 完成插件迁移、指纹刷新、Desktop 安装、管理员 Verify、总检、Skill 副本同步、安装包清理 → 回读三端版本。Status：`blocked_running`（有 claude 进程，退出后重跑）、`plugin_update_needed`（回到第 0 步，没下载、没改文件）、`up_to_date`（防护不用动）、`passed`（屏幕已打印前后版本、Verify、总检、各步秒数）、`failed`（读记录里的 `Error`，不重跑碰运气）。
+2. 退出全部 Claude（Desktop、VS Code 插件会话、CLI）后跑 `docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1`（不带参数；可做成桌面快捷方式）。脚本依次：查版本 → CLI 落后就 npm 装 → Desktop 落后就下载官方包并审核（同版本审核过的包直接复用）→ 登记四个目标指纹 → 弹一次 UAC 完成插件迁移、指纹刷新、Desktop 安装、管理员 Verify、总检、Skill 副本同步、安装包清理 → 回读三端版本。Status：`blocked_running`（有 claude 进程，退出后重跑）、`blocked_locked`（另一份三端更新正在跑，例如桌面图标和环境卫士同时点了；等它结束）、`plugin_update_needed`（回到第 0 步，没下载、没改文件）、`up_to_date`（防护不用动）、`passed`（屏幕已打印前后版本、Verify、总检、各步秒数）、`failed`（读记录里的 `Error`，不重跑碰运气）。
 3. 收尾读 `%LOCALAPPDATA%\ClaudeNetworkGuard\更新记录-<时间>\记录.json`：`Products`（前后版本）、`CliInstall`、`Desktop.DownloadSeconds`、`Maintenance.StepSeconds / Checks / Cleanup`、`After`（回读），耗时直接读这些字段。
 
 Claude Code 会话里不能跑第 2 步（`claude.exe` 在运行），由用户在会话外跑；模型只跑第 1、3 步。

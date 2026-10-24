@@ -2,7 +2,9 @@
 [CmdletBinding()]
 param(
   [switch] $OpenBrowser,
-  [switch] $Json
+  [switch] $Json,
+  # Guard：只查 Desktop 策略与直连防护，供一键更新在 UAC 内复核这次动过的项；默认 All 与原来一致。
+  [ValidateSet('All','Guard')][string] $Scope = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,87 +110,91 @@ Write-Host ''
 Write-Host 'Claude / Clash 环境一键总检' -ForegroundColor Cyan
 Write-Host ('检查时间：{0}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'))
 Write-Host '本工具只读检查；不会启动 Claude Code 或 Claude Desktop。' -ForegroundColor DarkGray
+if ($Scope -eq 'Guard') { Write-Host '范围：只查 Desktop 策略与直连防护（更新后由一键更新调用）；Clash、出口、快捷方式、网段阻断这次不查。' -ForegroundColor DarkGray }
 
-if (-not (Test-Path -LiteralPath $validator)) {
-  Add-Result FAIL '基础验证程序' "缺少文件：$validator"
-} else {
-  $engine = (Get-Process -Id $PID).Path
-  $output = @(& $engine -NoProfile -ExecutionPolicy Bypass -File $validator 2>&1)
-  $raw = $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Out-String
-  $stderrLine = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Select-Object -First 1
-  try {
-    $baseResult = $raw | ConvertFrom-Json
-    if ($baseResult.Success) {
-      Add-Result PASS 'Rule / TUN / Claude 规则' '基础验证 18/18；Clash 配置语法通过'
-      Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
-      Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；$portChrome 出口：$($baseResult.SocksPublicIp)"
-    } else {
-      Add-Result FAIL 'Rule / TUN / Claude 规则' ('失败项：' + ($baseResult.FailedChecks -join ', '))
+# Clash 规则、DNS、三个出口、专用浏览器快捷方式和更新无关，-Scope Guard 时不查。
+if ($Scope -eq 'All') {
+  if (-not (Test-Path -LiteralPath $validator)) {
+    Add-Result FAIL '基础验证程序' "缺少文件：$validator"
+  } else {
+    $engine = (Get-Process -Id $PID).Path
+    $output = @(& $engine -NoProfile -ExecutionPolicy Bypass -File $validator 2>&1)
+    $raw = $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Out-String
+    $stderrLine = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Select-Object -First 1
+    try {
+      $baseResult = $raw | ConvertFrom-Json
+      if ($baseResult.Success) {
+        Add-Result PASS 'Rule / TUN / Claude 规则' '基础验证 18/18；Clash 配置语法通过'
+        Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
+        Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；$portChrome 出口：$($baseResult.SocksPublicIp)"
+      } else {
+        Add-Result FAIL 'Rule / TUN / Claude 规则' ('失败项：' + ($baseResult.FailedChecks -join ', '))
+      }
+    } catch {
+      Add-Result FAIL '基础验证程序' ('输出不是有效 JSON' + $(if ($stderrLine) { "；stderr：$stderrLine" } else { '' }))
+      $baseResult = $null
     }
-  } catch {
-    Add-Result FAIL '基础验证程序' ('输出不是有效 JSON' + $(if ($stderrLine) { "；stderr：$stderrLine" } else { '' }))
-    $baseResult = $null
   }
-}
 
-if (Test-Path -LiteralPath $runtime) {
-  $runtimeText = Get-Content -LiteralPath $runtime -Raw
-  $strictRoute = $runtimeText -match '(?m)^\s*strict-route:\s*true\s*$'
-  $dnsUdp = $runtimeText -match '(?m)^\s*-\s*any:53\s*$'
-  $dnsTcp = $runtimeText -match '(?m)^\s*-\s*tcp://any:53\s*$'
-  if ($strictRoute -and $dnsUdp -and $dnsTcp) {
-    Add-Result PASS 'DNS 防旁路' 'strict-route=true；UDP/TCP 53 劫持已开启'
+  if (Test-Path -LiteralPath $runtime) {
+    $runtimeText = Get-Content -LiteralPath $runtime -Raw
+    $strictRoute = $runtimeText -match '(?m)^\s*strict-route:\s*true\s*$'
+    $dnsUdp = $runtimeText -match '(?m)^\s*-\s*any:53\s*$'
+    $dnsTcp = $runtimeText -match '(?m)^\s*-\s*tcp://any:53\s*$'
+    if ($strictRoute -and $dnsUdp -and $dnsTcp) {
+      Add-Result PASS 'DNS 防旁路' 'strict-route=true；UDP/TCP 53 劫持已开启'
+    } else {
+      Add-Result FAIL 'DNS 防旁路' 'strict-route 或 UDP/TCP 53 劫持缺失'
+    }
   } else {
-    Add-Result FAIL 'DNS 防旁路' 'strict-route 或 UDP/TCP 53 劫持缺失'
+    Add-Result FAIL 'Clash 运行配置' "缺少文件：$runtime"
   }
-} else {
-  Add-Result FAIL 'Clash 运行配置' "缺少文件：$runtime"
-}
 
-$exit65 = Test-ProxyExit http $portMixed
-$exit66 = Test-ProxyExit socks5h $portChrome
-$exit67 = Test-ProxyExit http $portDesktop
-foreach ($entry in @(
-  @{Name="Claude Code $portMixed";Value=$exit65},
-  @{Name="Claude Chrome $portChrome";Value=$exit66},
-  @{Name="Claude Desktop $portDesktop";Value=$exit67}
-)) {
-  if ($entry.Value.Succeeded) {
-    Add-Result PASS $entry.Name ("出口：{0}" -f $entry.Value.IP)
-  } else {
-    Add-Result FAIL $entry.Name '专用入口无法取得有效公网 IPv4'
+  $exit65 = Test-ProxyExit http $portMixed
+  $exit66 = Test-ProxyExit socks5h $portChrome
+  $exit67 = Test-ProxyExit http $portDesktop
+  foreach ($entry in @(
+    @{Name="Claude Code $portMixed";Value=$exit65},
+    @{Name="Claude Chrome $portChrome";Value=$exit66},
+    @{Name="Claude Desktop $portDesktop";Value=$exit67}
+  )) {
+    if ($entry.Value.Succeeded) {
+      Add-Result PASS $entry.Name ("出口：{0}" -f $entry.Value.IP)
+    } else {
+      Add-Result FAIL $entry.Name '专用入口无法取得有效公网 IPv4'
+    }
   }
-}
-$exitIps = @($exit65.IP,$exit66.IP,$exit67.IP) | Where-Object { $_ }
-if ($exitIps.Count -eq 3 -and @($exitIps | Select-Object -Unique).Count -eq 1) {
-  Add-Result PASS 'Claude 三入口一致性' "三个入口均为 $($exitIps[0])"
-} else {
-  Add-Result FAIL 'Claude 三入口一致性' ("$portMixed/$portChrome/$portDesktop：" + ($exitIps -join ' / '))
-}
+  $exitIps = @($exit65.IP,$exit66.IP,$exit67.IP) | Where-Object { $_ }
+  if ($exitIps.Count -eq 3 -and @($exitIps | Select-Object -Unique).Count -eq 1) {
+    Add-Result PASS 'Claude 三入口一致性' "三个入口均为 $($exitIps[0])"
+  } else {
+    Add-Result FAIL 'Claude 三入口一致性' ("$portMixed/$portChrome/$portDesktop：" + ($exitIps -join ' / '))
+  }
 
-$browserShortcuts = @(
-  (Join-Path $desktop 'Claude-账号1-专用Chrome.lnk'),
-  (Join-Path $desktop 'Claude-账号2-专用Chrome.lnk')
-)
-$readyBrowser = $null
-foreach ($shortcutPath in $browserShortcuts) {
-  $shortcut = Read-Shortcut $shortcutPath
-  if ($null -eq $shortcut) {
-    Add-Result WARN ([IO.Path]::GetFileName($shortcutPath)) '快捷方式不存在'
-    continue
-  }
-  $arguments = $shortcut.Arguments
-  $ready =
-    ($arguments -like '*--user-data-dir=*') -and
-    ($arguments -like "*127.0.0.1:$portChrome*") -and
-    ($arguments -like '*--host-resolver-rules=*') -and
-    ($arguments -like '*--lang=en-US*') -and
-    ($arguments -like '*disable_non_proxied_udp*')
-  if ($ready) {
-    Add-Result PASS ([IO.Path]::GetFileName($shortcutPath)) "独立 User Data、$portChrome、远端 DNS、en-US、WebRTC 防旁路参数齐全"
-    if ($null -eq $readyBrowser) { $readyBrowser = $shortcutPath }
-  } else {
-    Add-Result FAIL ([IO.Path]::GetFileName($shortcutPath)) '专用浏览器参数不完整'
+  $browserShortcuts = @(
+    (Join-Path $desktop 'Claude-账号1-专用Chrome.lnk'),
+    (Join-Path $desktop 'Claude-账号2-专用Chrome.lnk')
+  )
+  $readyBrowser = $null
+  foreach ($shortcutPath in $browserShortcuts) {
+    $shortcut = Read-Shortcut $shortcutPath
+    if ($null -eq $shortcut) {
+      Add-Result WARN ([IO.Path]::GetFileName($shortcutPath)) '快捷方式不存在'
+      continue
+    }
+    $arguments = $shortcut.Arguments
+    $ready =
+      ($arguments -like '*--user-data-dir=*') -and
+      ($arguments -like "*127.0.0.1:$portChrome*") -and
+      ($arguments -like '*--host-resolver-rules=*') -and
+      ($arguments -like '*--lang=en-US*') -and
+      ($arguments -like '*disable_non_proxied_udp*')
+    if ($ready) {
+      Add-Result PASS ([IO.Path]::GetFileName($shortcutPath)) "独立 User Data、$portChrome、远端 DNS、en-US、WebRTC 防旁路参数齐全"
+      if ($null -eq $readyBrowser) { $readyBrowser = $shortcutPath }
+    } else {
+      Add-Result FAIL ([IO.Path]::GetFileName($shortcutPath)) '专用浏览器参数不完整'
+    }
   }
 }
 
@@ -326,23 +332,26 @@ if (Test-Path -LiteralPath $guardManifest) {
   Add-Result FAIL 'Claude Desktop / Code 直连防护' "缺少防护清单：$guardManifest"
 }
 
-if (-not (Test-Path -LiteralPath $rangeCheck)) {
-  Add-Result FAIL 'Anthropic 网段直连阻断' "缺少检查脚本：$rangeCheck"
-} else {
-  try {
-    $engine = (Get-Process -Id $PID).Path
-    $rangeResult = (& $engine -NoProfile -ExecutionPolicy Bypass -File $rangeCheck -Action Check -Json 2>$null | Out-String) | ConvertFrom-Json
-    if ($rangeResult.Succeeded) { Add-Result PASS 'Anthropic 网段直连阻断' $rangeResult.Evidence }
-    else { Add-Result FAIL 'Anthropic 网段直连阻断' $rangeResult.Evidence }
-  } catch {
-    Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
+# 网段阻断和更新无关，-Scope Guard 时不查。
+if ($Scope -eq 'All') {
+  if (-not (Test-Path -LiteralPath $rangeCheck)) {
+    Add-Result FAIL 'Anthropic 网段直连阻断' "缺少检查脚本：$rangeCheck"
+  } else {
+    try {
+      $engine = (Get-Process -Id $PID).Path
+      $rangeResult = (& $engine -NoProfile -ExecutionPolicy Bypass -File $rangeCheck -Action Check -Json 2>$null | Out-String) | ConvertFrom-Json
+      if ($rangeResult.Succeeded) { Add-Result PASS 'Anthropic 网段直连阻断' $rangeResult.Evidence }
+      else { Add-Result FAIL 'Anthropic 网段直连阻断' $rangeResult.Evidence }
+    } catch {
+      Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
+    }
   }
-}
 
-# 检测站自动读数：真实去 ping0.cc / ip.net.coffee 渲染取数后判定（iprisk.top 在第 7 层，ippure.com 无头拿不到）。
-# 它只看出口 IP 读数，不代表专用 Chrome / Desktop 里登录、DNS、WebRTC、IPv6、语言和时区都正常，所以网页验收仍是人工项。
-$web = Get-WebAcceptanceVerdict
-Add-Result $web.Status '检测站自动读数' $web.Evidence
+  # 检测站自动读数：真实去 ping0.cc / ip.net.coffee 渲染取数后判定（iprisk.top 在第 7 层，ippure.com 无头拿不到）。
+  # 它只看出口 IP 读数，不代表专用 Chrome / Desktop 里登录、DNS、WebRTC、IPv6、语言和时区都正常，所以网页验收仍是人工项。
+  $web = Get-WebAcceptanceVerdict
+  Add-Result $web.Status '检测站自动读数' $web.Evidence
+}
 Add-Result MANUAL '网页最终验收' '专用 Chrome / Desktop 内置浏览器分别确认：Claude IP、DNS、WebRTC、IPv6、语言和时区全绿'
 
 if ($Json) {

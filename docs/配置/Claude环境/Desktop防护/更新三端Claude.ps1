@@ -6,10 +6,15 @@
 # 子脚本的结果一律走文件，屏幕输出只进日志；10-22 之前把屏幕文字当 JSON 解析，curl 的一行报错就让流程假失败。
 # 下载不做跨次续传：没下完的临时文件（Claude-<版本>-下载中.msix）直接删掉重下；10-20 的 416 续传分支就是为跨次续传存在的，删掉后不再有这条分支。
 # 安全边界：文件指纹与清单不同时必须带有效 Anthropic 签名；不结束进程、不改策略、不启动 Claude。
+# 10-24 并入环境卫士：三个版本源改为同时查；Update 加单实例锁；-RunDirectory、-ChangedOnly 只给卫士用，不传时行为不变。
 [CmdletBinding()]
 param(
     [ValidateSet('Update','Check')][string]$Action = 'Update',
-    [string]$Proxy = 'http://127.0.0.1:43867'
+    [string]$Proxy = 'http://127.0.0.1:43867',
+    # 卫士指定本次记录目录：Update 用它代替 更新记录-<时间>；Check 把记录写成其中的 检查记录.json。
+    [string]$RunDirectory,
+    # UAC 内的日常总检只查这次更新动过的项（Desktop 策略与直连防护），Clash、出口、快捷方式不查。
+    [switch]$ChangedOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,11 +26,31 @@ $clock = [Diagnostics.Stopwatch]::StartNew()
 $guardRoot = Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard'
 $null = New-Item -ItemType Directory -Path $guardRoot -Force
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+if ($RunDirectory) { $RunDirectory = [IO.Path]::GetFullPath($RunDirectory) }
+# 单实例锁：两份 Update 同时跑会抢同一个安装包和防护清单。第二份直接退出、不建记录目录；卫士指定了目录时留一份说明。
+if ($Action -eq 'Update') {
+    $instanceLock = [Threading.Mutex]::new($false, 'Local\ClaudeThreeEndUpdate')
+    $owned = try { $instanceLock.WaitOne(0) } catch { if ($_.Exception.GetBaseException() -is [Threading.AbandonedMutexException]) { $true } else { throw } }
+    if (-not $owned) {
+        $message = '另一份三端更新正在运行（桌面「Claude-三端更新」窗口或环境卫士）；等它结束后再运行。本次没有下载、没有改任何文件。'
+        if ($RunDirectory) {
+            $null = New-Item -ItemType Directory -Path $RunDirectory -Force
+            [ordered]@{ At = (Get-Date -Format o); Action = $Action; Status = 'blocked_locked'; RecordPath = (Join-Path $RunDirectory '记录.json'); Error = $message } |
+                ConvertTo-Json | Set-Content -LiteralPath (Join-Path $RunDirectory '记录.json') -Encoding utf8
+        }
+        Write-Host ('[{0}] {1}' -f (Get-Date -Format 'HH:mm:ss'), $message)
+        exit 1
+    }
+}
 # Update 一次一个目录，记录和全部日志都在里面；Check 只留一个 json。
 if ($Action -eq 'Update') {
-    $runDir = Join-Path $guardRoot ('更新记录-' + $stamp)
+    $runDir = if ($RunDirectory) { $RunDirectory } else { Join-Path $guardRoot ('更新记录-' + $stamp) }
     $null = New-Item -ItemType Directory -Path $runDir -Force
     $recordPath = Join-Path $runDir '记录.json'
+} elseif ($RunDirectory) {
+    $runDir = $null
+    $null = New-Item -ItemType Directory -Path $RunDirectory -Force
+    $recordPath = Join-Path $RunDirectory '检查记录.json'
 } else {
     $runDir = $null
     $recordPath = Join-Path $guardRoot ('检查记录-' + $stamp + '.json')
@@ -104,6 +129,25 @@ function Get-PluginLatest {
     if ($versions.Count -eq 0) { throw '官方市场没有返回 win32-x64 版本。' }
     return [string]$versions[0]
 }
+# 三个远端版本源各开一个线程同时查（串行约 6.3 秒，并行约 1.9 秒）。线程里没有本脚本的函数，按定义原文重建；
+# 函数里用到的 $Proxy 作为同名参数传进去。出错时按原文抛出，由调用方按原来的先后顺序报第一个错。
+function Start-RemoteQuery([string]$Name, [object[]]$Arguments = @()) {
+    $definition = (Get-Command $Name -CommandType Function).Definition
+    Start-ThreadJob -ArgumentList $definition, $Proxy, $Arguments -ScriptBlock {
+        param([string]$Definition, [string]$Proxy, [object[]]$Arguments)
+        $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'SilentlyContinue'
+        # 线程失败时任务状态只剩 ScriptHalted，原文要自己带回来。
+        try { [pscustomobject]@{ Value = (& ([scriptblock]::Create($Definition)) @Arguments); Error = $null } }
+        catch { [pscustomobject]@{ Value = $null; Error = $_.Exception.Message } }
+    }
+}
+function Receive-RemoteQuery($Job) {
+    $reply = Receive-Job $Job -Wait
+    if ($null -eq $reply) { throw ('后台查询没有返回结果：' + $Job.State) }
+    if ($null -ne $reply.Error) { throw $reply.Error }
+    return $reply.Value
+}
 function New-Product([string]$Name, [string]$Installed, [string]$Latest) {
     [ordered]@{ Product = $Name; Installed = $Installed; Latest = $Latest; Status = $(if ([version]$Latest -gt [version]$Installed) { 'update_available' } else { 'up_to_date' }) }
 }
@@ -181,18 +225,24 @@ function Show-Products($Rows) {
 try {
     Save-Record
     Say ('查三端版本（记录：' + $recordPath + '）')
-    $installed = Get-InstalledDesktop
     $arch = switch ([Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
         ([Runtime.InteropServices.Architecture]::X64) { 'x64' }
         ([Runtime.InteropServices.Architecture]::Arm64) { 'arm64' }
         default { throw ('不支持的系统架构：' + $_) }
     }
-    if ([string]$installed.Architecture -ne $arch) { throw ('已装包架构 ' + $installed.Architecture + ' 与系统架构 ' + $arch + ' 不一致，停止。') }
-    $desktopLatest = Get-DesktopLatest $arch
-    $cliInstalled = Get-CliInstalled
-    $cliLatest = Get-CliLatest
-    $plugin = Get-PluginInstalled
-    $pluginLatest = Get-PluginLatest
+    # 远端三项在后台线程里查，本机三项（含约 1.2 秒的 Appx 模块加载）同时在主线程读；报错顺序和串行时一样。
+    $remote = [ordered]@{ Desktop = Start-RemoteQuery 'Get-DesktopLatest' @($arch); Cli = Start-RemoteQuery 'Get-CliLatest'; Plugin = Start-RemoteQuery 'Get-PluginLatest' }
+    try {
+        $installed = Get-InstalledDesktop
+        if ([string]$installed.Architecture -ne $arch) { throw ('已装包架构 ' + $installed.Architecture + ' 与系统架构 ' + $arch + ' 不一致，停止。') }
+        $desktopLatest = Receive-RemoteQuery $remote.Desktop
+        $cliInstalled = Get-CliInstalled
+        $cliLatest = Receive-RemoteQuery $remote.Cli
+        $plugin = Get-PluginInstalled
+        $pluginLatest = Receive-RemoteQuery $remote.Plugin
+    } finally {
+        $remote.Values | Remove-Job -Force -ErrorAction SilentlyContinue
+    }
     $record.Products = @(
         (New-Product 'Claude Desktop' ([string]$installed.Version) $desktopLatest.Latest),
         (New-Product 'Claude Code CLI' $cliInstalled $cliLatest),
@@ -286,6 +336,7 @@ try {
     if ($desktopBehind) { $command += ' -PackagePath ' + (Quote-Literal $package.Path) + ' -ApprovedSHA256 ' + (Quote-Literal $package.SHA256) }
     $command += ' -CliApprovedSHA256 ' + (@($hashes | ForEach-Object { Quote-Literal $_ }) -join ',')
     if ($pluginMoved) { $command += ' -PluginApprovedSHA256 ' + (Quote-Literal $pluginApproved) }
+    if ($ChangedOnly) { $command += ' -ChangedOnly' }
     $record.Command = $command
     Save-Record
     Say '开始更新：接下来会弹一次 UAC，请点「是」…'
