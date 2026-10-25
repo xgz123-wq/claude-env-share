@@ -3,12 +3,20 @@
 > 让 **Claude Code**、**Claude Desktop** 与**专用 Chrome** 走同一条干净、固定、不泄漏的出口。
 > 出口不通就断网，**绝不偷偷直连**。
 >
-> 分享版 · 2026-10-01 从一台已稳定运行的 Windows 机器整理 · 已去掉账号别名、出口 IP 与本机状态文件
+> 分享版 · 2026-10-01 从一台已稳定运行的 Windows 机器整理，之后随原机器维护同步（见[提交记录](https://github.com/xgz123-wq/claude-env-share/commits/master)）· 已去掉账号别名、出口 IP 与本机状态文件
+
+[![Stars](https://img.shields.io/github/stars/xgz123-wq/claude-env-share?style=flat-square&logo=github)](https://github.com/xgz123-wq/claude-env-share/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/xgz123-wq/claude-env-share?style=flat-square)](https://github.com/xgz123-wq/claude-env-share/commits/master)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=flat-square)
+![PowerShell 7](https://img.shields.io/badge/PowerShell-7-5391fe?style=flat-square)
+
+如果它帮你把 Claude 的网络环境理顺了，可以点个 [Star](https://github.com/xgz123-wq/claude-env-share)，方便以后回来，也让有同样需求的人更容易找到。问题和建议请提 [Issue](https://github.com/xgz123-wq/claude-env-share/issues)。
 
 ![总架构图：三个入口，一个出口](docs/配置/Claude环境/assets/Claude三入口一出口总架构.svg)
 
 ## 目录
 
+- [三步开始](#三步开始)
 - [两条路径](#两条路径)
 - [它解决什么问题](#它解决什么问题)
 - [你要准备的东西](#你要准备的东西)
@@ -16,9 +24,20 @@
 - [图解资料](#图解资料)
 - [常见问题](#常见问题)
 - [首次打开会看到的报错](#首次打开会看到的报错)
+- [日常维护：三端更新](#日常维护三端更新)
 - [这套东西包含什么](#这套东西包含什么)
 - [目录结构](#目录结构)
 - [边界与平台要求](#边界与平台要求)
+
+---
+
+## 三步开始
+
+1. **备齐**[你要准备的东西](#你要准备的东西)：Windows 10 / 11、PowerShell 7、Clash Verge Rev 和你自己的订阅。
+2. **打开**：用 Claude Code、Claude Desktop 的 Code 标签页或 Codex 把这个文件夹当项目打开，说一句「按 AGENTS.md 帮我在这台机器上部署 Claude 环境」。
+3. **验收**：部署完成后跑一键总检，要求 `FAIL = 0`（命令见[怎么确认真的走对了](#怎么确认真的走对了)）。
+
+没做完的步骤会让部分检查报错，这是预期，见[首次打开会看到的报错](#首次打开会看到的报错)。
 
 ---
 
@@ -246,6 +265,22 @@ WFP 是 Windows 内核自带的网络过滤框架（Windows 防火墙本身就�
 
 ---
 
+## 日常维护：三端更新
+
+Claude Code CLI、VS Code 插件、Claude Desktop 的版本更新由一个入口完成，更新时 Desktop 的自动更新保持关闭，由你手动触发：
+
+```powershell
+# 只看三端要不要更新：不下载、不提权、不改文件，Claude 开着也能跑
+pwsh -NoProfile -File docs\配置\Claude环境\Desktop防护\更新三端Claude.ps1 -Action Check
+```
+
+- **要更新时**：先退出全部 Claude，再运行同一个脚本（不带参数）。脚本会按需安装新版本、登记受保护程序的指纹，并只弹一次 UAC 完成安装与验证。
+- **桌面图标**：完成部署第 7 步后，桌面会有「Claude-三端更新」，等同于上面的脚本。
+- **安全边界**：文件指纹与清单不同时，必须带有效的 Anthropic 签名才放行；脚本不会结束进程、不会改策略、不会启动 Claude。
+- **更多细节**：[更新维护说明](docs/配置/Claude环境/Desktop防护/更新维护说明.md)、Skill [claude-maintenance](.agents/skills/claude-maintenance/SKILL.md)。
+
+---
+
 ## 这套东西包含什么
 
 | 层 | 做什么 | 位置 |
@@ -255,6 +290,7 @@ WFP 是 Windows 内核自带的网络过滤框架（Windows 防火墙本身就�
 | Claude Code | `~/.claude/settings.json` 的 `env` 指向 `43865` | Skill `claude-safe-network` |
 | 专用 Chrome | 每个账号独立用户目录，SOCKS `43866`，防 DNS / WebRTC 泄漏 | [说明/账号浏览器.md](docs/配置/Claude环境/说明/账号浏览器.md) |
 | Claude Desktop | HKLM 策略走 `43867`、关自动更新、直连防护（WFP） | [Desktop防护/](docs/配置/Claude环境/Desktop防护/) |
+| 更新 | 三端版本检查与手动更新，更新后自动登记指纹 | [更新三端Claude.ps1](docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1) |
 | 检查 | 一键总检、五项自检、9 层全量体检 | [Claude环境一键总检.ps1](docs/配置/Claude环境/Claude环境一键总检.ps1) + Skill `scripts/checks/` |
 
 ---
@@ -273,7 +309,7 @@ Claude环境分享版/
 │  ├─ 清理维护残留.ps1               列出并清理过期备份；默认只列不删
 │  ├─ 维护日志.md                    最近一轮维护的结论与证据
 │  ├─ Clash/                        全局脚本副本、通道验证、五项自检
-│  ├─ Desktop防护/                  直连防护、43867 通道、自动更新开关
+│  ├─ Desktop防护/                  直连防护、43867 通道、自动更新开关、三端更新入口
 │  ├─ assets/                       图解资料与图标（总架构图 + 两张参考 PNG）
 │  └─ 说明/                         架构讲解.html 及四份说明
 └─ .agents/skills/
@@ -290,3 +326,8 @@ Claude环境分享版/
 | **只保证** | 出口干净、不泄漏、不绕过代理 |
 | **不做** | 规避检测、伪装身份、绕过 Anthropic 的地区或账号规则；使用前请确认你所在地区和付款方式符合 Anthropic 条款 |
 | **平台** | Windows 10 / 11 + Clash Verge Rev（mihomo 内核）+ PowerShell 7，仅此三种 |
+| **许可** | 仓库目前没有 `LICENSE` 文件，作者保留所有权利；个人参考和自用部署之外的转载、再分发请先联系作者 |
+
+---
+
+如果这套配置帮你省了排障的时间，欢迎点个 [Star](https://github.com/xgz123-wq/claude-env-share)；遇到问题或有改进建议，请提 [Issue](https://github.com/xgz123-wq/claude-env-share/issues)。
