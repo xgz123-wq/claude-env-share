@@ -8,6 +8,7 @@
 [![Stars](https://img.shields.io/github/stars/xgz123-wq/claude-env-share?style=flat-square&logo=github)](https://github.com/xgz123-wq/claude-env-share/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/xgz123-wq/claude-env-share?style=flat-square)](https://github.com/xgz123-wq/claude-env-share/commits/master)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=flat-square)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 ![PowerShell 7](https://img.shields.io/badge/PowerShell-7-5391fe?style=flat-square)
 
 如果它帮你把 Claude 的网络环境理顺了，可以点个 [Star](https://github.com/xgz123-wq/claude-env-share)，方便以后回来，也让有同样需求的人更容易找到。问题和建议请提 [Issue](https://github.com/xgz123-wq/claude-env-share/issues)。
@@ -326,7 +327,7 @@ Claude环境分享版/
 | **只保证** | 出口干净、不泄漏、不绕过代理 |
 | **不做** | 规避检测、伪装身份、绕过 Anthropic 的地区或账号规则；使用前请确认你所在地区和付款方式符合 Anthropic 条款 |
 | **平台** | Windows 10 / 11 + Clash Verge Rev（mihomo 内核）+ PowerShell 7，仅此三种 |
-| **许可** | 仓库目前没有 `LICENSE` 文件，作者保留所有权利；个人参考和自用部署之外的转载、再分发请先联系作者 |
+| **许可** | [MIT License](LICENSE)，可自由使用、修改和分发；脚本会改动系统网络与防火墙设置，风险由使用者自负 |
 
 ---
 
