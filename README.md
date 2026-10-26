@@ -1,334 +1,205 @@
 # Claude 环境分享版
 
-> 让 **Claude Code**、**Claude Desktop** 与**专用 Chrome** 走同一条干净、固定、不泄漏的出口。
-> 出口不通就断网，**绝不偷偷直连**。
->
-> 分享版 · 2026-10-01 从一台已稳定运行的 Windows 机器整理，之后随原机器维护同步（见[提交记录](https://github.com/xgz123-wq/claude-env-share/commits/master)）· 已去掉账号别名、出口 IP 与本机状态文件
+让 **Claude Code**、**Claude Desktop** 和**专用 Chrome** 走同一条干净、固定的代理出口；出口不通就断网，绝不偷偷直连。
 
 [![Stars](https://img.shields.io/github/stars/xgz123-wq/claude-env-share?style=flat-square&logo=github)](https://github.com/xgz123-wq/claude-env-share/stargazers)
-[![Last Commit](https://img.shields.io/github/last-commit/xgz123-wq/claude-env-share?style=flat-square)](https://github.com/xgz123-wq/claude-env-share/commits/master)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=flat-square)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 ![PowerShell 7](https://img.shields.io/badge/PowerShell-7-5391fe?style=flat-square)
-
-如果它帮你把 Claude 的网络环境理顺了，可以点个 [Star](https://github.com/xgz123-wq/claude-env-share)，方便以后回来，也让有同样需求的人更容易找到。问题和建议请提 [Issue](https://github.com/xgz123-wq/claude-env-share/issues)。
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 ![总架构图：三个入口，一个出口](docs/配置/Claude环境/assets/Claude三入口一出口总架构.svg)
 
+> 2026-10-01 从一台稳定运行的 Windows 机器整理，之后随原机器维护同步（见[提交记录](https://github.com/xgz123-wq/claude-env-share/commits/master)）。已去掉账号别名、出口 IP 和本机状态文件。
+
 ## 目录
 
-- [三步开始](#三步开始)
-- [两条路径](#两条路径)
-- [它解决什么问题](#它解决什么问题)
-- [你要准备的东西](#你要准备的东西)
-- [兜底策略与流量走向](#兜底策略与流量走向)
-- [图解资料](#图解资料)
+- [适用条件](#适用条件)
+- [快速上手](#快速上手)
+- [端口说明](#端口说明)
+- [工作原理](#工作原理)
+- [日常使用](#日常使用)
 - [常见问题](#常见问题)
-- [首次打开会看到的报错](#首次打开会看到的报错)
-- [日常维护：三端更新](#日常维护三端更新)
-- [这套东西包含什么](#这套东西包含什么)
 - [目录结构](#目录结构)
-- [边界与平台要求](#边界与平台要求)
+- [边界与许可](#边界与许可)
 
----
+## 适用条件
 
-## 三步开始
-
-1. **备齐**[你要准备的东西](#你要准备的东西)：Windows 10 / 11、PowerShell 7、Clash Verge Rev 和你自己的订阅。
-2. **打开**：用 Claude Code、Claude Desktop 的 Code 标签页或 Codex 把这个文件夹当项目打开，说一句「按 AGENTS.md 帮我在这台机器上部署 Claude 环境」。
-3. **验收**：部署完成后跑一键总检，要求 `FAIL = 0`（命令见[怎么确认真的走对了](#怎么确认真的走对了)）。
-
-没做完的步骤会让部分检查报错，这是预期，见[首次打开会看到的报错](#首次打开会看到的报错)。
-
----
-
-## 两条路径
-
-拿到这个文件夹，你只需要选一条。
-
-| 路径 | 适合谁 | 怎么做 |
-|---|---|---|
-| **A · 直接部署** | 我只想配好能用，不想研究原理 | 备齐[你要准备的东西](#你要准备的东西)，然后把文件夹当项目打开，对我说「按 AGENTS.md 帮我部署」 |
-| **B · 先搞懂** | 我想知道它动了什么，以后能自己排障 | 按下面的顺序读一遍，再走路径 A |
-
-### 路径 B 的阅读顺序
-
-| 顺序 | 读什么 | 读完知道什么 |
-|---|---|---|
-| 1 | [架构图](docs/配置/Claude环境/assets/Claude三入口一出口总架构.svg) | 三个入口分别走哪个端口、最后汇到哪 |
-| 2 | [兜底策略与流量走向](#兜底策略与流量走向) | 规则怎么匹配、出故障会怎样 |
-| 3 | [说明/架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html) | 每个配置点的含义，出问题定位到哪一层（图解，双击打开） |
-| 4 | [说明/DNS分层说明.md](docs/配置/Claude环境/说明/DNS分层说明.md) | 为什么 IPv6 要关三层、DNS 怎么分层 |
-| 5 | [说明/账号浏览器.md](docs/配置/Claude环境/说明/账号浏览器.md) | 专用 Chrome 的每个启动参数在干什么（配合 [两层架构图](docs/配置/Claude环境/assets/Claude专用浏览器与Clash两层架构.png) 看） |
-| 6 | [说明/日常使用.md](docs/配置/Claude环境/说明/日常使用.md) | 每天开工前点什么、看到 FAIL 怎么办 |
-
----
-
-## 它解决什么问题
-
-一句话：**让 Claude 相关程序走一条干净、固定、不泄漏的出口；出问题时宁可断网，也绝不偷偷直连。**
-
-要同时满足三件事，缺一件就可能被拦或本身有泄漏风险：
-
-| 要做到 | 不这么做会怎样 |
+| 项 | 要求 |
 |---|---|
-| 出口 IP 干净（住宅、非机房） | Claude 判定为高风险，登录或对话被拦 |
-| 出口固定不变 | 同一会话里 IP 在中美之间跳，风控直接判异常 |
-| 不泄漏（DNS / IPv6 / WebRTC 都不走本地） | 被检测到本地运营商 DNS 或真实 IP，等于没走代理 |
+| 系统 | Windows 10 / 11 |
+| 命令行 | PowerShell 7（命令是 `pwsh`） |
+| 代理客户端 | Clash Verge Rev（mihomo 内核），已导入你自己的订阅 |
+| 浏览器 | Google Chrome（只在建专用浏览器时需要） |
+| AI 工具 | Claude Code、Claude Desktop 的 Code 标签页或 Codex，任选其一，用来执行部署 |
 
-这套配置就是把上面三件事，在 Clash、Windows 系统、三个程序（CLI / 专用 Chrome / Desktop）上逐层落实。你不需要懂它，照做就行。
+其他代理客户端（Clash for Windows、v2rayN 等）和 macOS 不在支持范围内。
 
----
+## 快速上手
 
-## 你要准备的东西
+**1. 把混合端口改成 `43865`**
 
-### 需要你准备
+打开 Clash Verge Rev 的「设置」页 →「端口设置」，把**混合代理端口**改成 `43865` 并保存。Verge 默认是 `7897`，这套配置的脚本统一按 `43865` 写，不改的话 Claude Code 会连不上。原因和自查方法见[端口说明](#端口说明)。
 
-- [ ] **一台 Windows 10 / 11**，已安装 PowerShell 7（命令是 `pwsh`）
-- [ ] **一份你自己的代理订阅**，能在 Clash Verge Rev 里导入
-- [ ] **Google Chrome**（只有当你要建专用浏览器时才需要）
-- [ ] **你的 Claude 账号**
+**2. 让 AI 按 AGENTS.md 部署**
 
-### 需要你亲手做（AI 替不了）
-
-- [ ] 导入订阅到 Clash Verge Rev
-- [ ] 在 `ACCOUNT-US` 组里**手选一个节点** —— 节点质量要你自己判断
-- [ ] 弹 UAC 时点「是」 —— 安装直连防护、写系统策略需要管理员权限
-- [ ] 登录 Claude 账号
-- [ ] 一键总检后**肉眼看检测站** —— 出口、DNS、WebRTC、IPv6、语言、时区要人眼确认
-
-### 然后交给我
-
-把整个文件夹当项目用编辑器打开（Claude Code、Claude Desktop 的 Code 标签页、Codex 都行），说一句：
+用 AI 工具把这个文件夹当项目打开，发一句：
 
 ```text
 按 AGENTS.md 帮我在这台机器上部署 Claude 环境
 ```
 
-我会一步步做，每步先说明要改什么，再动手。
+AI 会先做端口预检，再逐步配置 Clash、系统、三个程序，每步先说明要改什么。下面几件事 AI 替不了，要你亲手做：
 
----
+- **选节点**：在 Verge 的 `ACCOUNT-US` 组里手选一个节点，节点质量由你判断。
+- **点 UAC**：安装直连防护、写系统策略时弹出的管理员确认，点「是」。
+- **登录账号**：在专用 Chrome 和 Claude Desktop 里登录你的 Claude 账号。
+- **看检测站**：部署完后肉眼核对出口、DNS、WebRTC、IPv6、语言、时区。
 
-## 兜底策略与流量走向
-
-### 三个入口，一个出口
-
-| 入口 | 走哪 | 代理不通时 |
-|---|---|---|
-| Claude Code CLI / VS Code 插件 | `43865`（Clash 混合端口） | 请求直接失败，不会直连 |
-| 专用 Chrome | `43866`（SOCKS） | 页面报代理连接失败，不会直连 |
-| Claude Desktop | `43867`（HTTP，HKLM 策略写死） | 网络功能失效，不会直连 |
-
-**最重要的一条：不自动降级。** `ACCOUNT-US` 是 `select` 类型，节点挂了它就停在那里失败，**不会**自动换节点，更不会退回直连。所以哪天突然上不去，先看 Verge 里 `ACCOUNT-US` 选的节点是否还活着。
-
-这条原则落到 Desktop 上的完整流程（正常 / 启动前拦截 / 运行中兜底）见 [Claude-Desktop三层防护流程.png](docs/配置/Claude环境/assets/Claude-Desktop三层防护流程-2026-09-12.png)。
-
-### 规则匹配顺序
-
-规则从上往下匹配，命中即停：
-
-| 顺序 | 规则 | 作用 |
-|---|---|---|
-| 1 | `IN-NAME,account-us-socks,ACCOUNT-US` | 从 `43866` 进来的连接直接入组 |
-| 2 | Claude 域名 / IP 段 / ASN | Claude 流量入组，优先于后面所有规则 |
-| 3 | 浏览器 DoH 端点 → `DIRECT` | 防浏览器自带加密 DNS 被兜底规则送出国，把国内域名解析成海外 IP |
-| 4 | 订阅原有规则（`GEOSITE,cn` / `GEOIP,CN` → `DIRECT` 等） | 国内流量直连，不绕美国 |
-| 5 | `MATCH,Proxy` | 其余走订阅兜底组 |
-
-### 系统层的三道硬拦
-
-与规则无关，独立生效：
-
-| 层 | 拦什么 | 状态 |
-|---|---|---|
-| 防火墙规则 | 出站阻断 `160.79.104.0/23`，任何程序直连 Anthropic 官方 IP 都被拦 | 部署时创建 |
-| IPv6 三层关闭 + TUN `strict-route` / `dns-hijack` | IPv6 泄漏、多网卡 DNS 旁路 | 部署时配置 |
-| WFP 程序级直连防护 | 精确到 EXE 的非回环直连阻断（见 [常见问题](#常见问题)） | 需在本机自建 |
-
-### 怎么确认真的走对了
-
-配置写对了**不等于**流量真的走对了。看现场证据：
+**3. 跑一键总检验收**
 
 ```powershell
-# 五项自检：规则、监听、快捷方式参数、IPv6、真实出口
-pwsh -NoProfile -File docs\配置\Claude环境\Clash\Claude日常五项自检.ps1 -Alias 账号1 -NoBrowser
-
-# 全量总检：Clash、DNS、三入口一致、Desktop 代理、直连防护、国内连通
 pwsh -NoProfile -File docs\配置\Claude环境\Claude环境一键总检.ps1
 ```
 
-再打开 Clash Verge 的「连接」页搜 `anthropic`，看命中的是不是 `ACCOUNT-US`。
+要求 `FAIL = 0`。部署没做完时会有几项预期内的报错，对照表见[首次打开会看到的报错](docs/配置/Claude环境/README.md#首次打开会看到的报错)。
 
----
+## 端口说明
 
-## 图解资料
+这套配置用 3 个本机端口，分别给 3 个程序用。每个程序只走自己那个端口，端口不通就直接失败，不会退回直连。
 
-四张图分工不同，按需要的粒度挑着看：
+### 原机器的实际配置
 
-| 图 | 看什么 | 粒度 |
-|---|---|---|
-| [Claude三入口一出口总架构.svg](docs/配置/Claude环境/assets/Claude三入口一出口总架构.svg) | 三个入口分别走哪个端口、最终汇到哪、规则链顺序 | 全局 |
-| [Claude-Desktop三层防护流程.png](docs/配置/Claude环境/assets/Claude-Desktop三层防护流程-2026-09-12.png) | Desktop 的正常流程、启动前拦截、运行中兜底 | Desktop |
-| [Claude专用浏览器与Clash两层架构.png](docs/配置/Claude环境/assets/Claude专用浏览器与Clash两层架构.png) | 专用 Chrome 的路由层 + 浏览器环境层（账号隔离、DNS/WebRTC/IPv6/语言/时区/位置权限）、登录前验收 | 专用 Chrome |
-| [架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html) | 每个配置点的含义、故障定位到哪一层 | 全部（可交互，双击打开） |
+以下是整理这份分享包的那台机器上，Clash Verge Rev 的实测值：
 
-- 前两张 PNG 是 2026-09 整理时从原机器带过来的参考图，**讲的是局部**，粒度比总架构图细。
-- 总架构图覆盖三个入口，PNG 分别只覆盖 Desktop 和专用 Chrome，**内容互补，不重复**。
-- 需要文字版对照（谁拦什么、状态如何）看上面[系统层的三道硬拦](#系统层的三道硬拦)。
+| 端口 | 是谁设的 | 给谁用 | 协议 |
+|---|---|---|---|
+| `43865` | Verge「端口设置」里的**混合代理端口**，从默认的 `7897` 手动改成 | Claude Code CLI、VS Code 插件 | HTTP + SOCKS |
+| `43866` | 全局扩展脚本新开的监听端口 | 专用 Chrome | SOCKS5 |
+| `43867` | 全局扩展脚本新开的监听端口 | Claude Desktop | HTTP |
+| `7898` / `7899` | Verge 自带的 SOCKS 端口和 HTTP 端口 | 这套配置不用，保持默认即可 | — |
 
----
+- **`43865` 要你手动改**：它是 Verge 自己的设置项，每台机器默认值不同，所以部署前必须改成 `43865`。
+- **`43866` / `43867` 不用改**：它们由全局扩展脚本自动创建，在 Verge 设置界面里看不到，只能用下面的命令查。
+
+### 在你的机器上自查
+
+在 PowerShell 7 里运行：
+
+```powershell
+# 1. 看 Verge 当前的混合端口，应为 43865
+Select-String "$env:APPDATA\io.github.clash-verge-rev.clash-verge-rev\verge.yaml" -Pattern '^verge_mixed_port'
+
+# 2. 看三个端口被谁占用
+Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction SilentlyContinue |
+  Select-Object LocalPort, @{n='Process';e={(Get-Process -Id $_.OwningProcess).ProcessName}}
+```
+
+| 时机 | 第 2 条命令的正常结果 |
+|---|---|
+| 部署前 | 只有 `43865` 显示 `verge-mihomo`（改完混合端口后）；`43866` / `43867` 没有输出 |
+| 部署后 | 三个端口都显示 `verge-mihomo` |
+
+### 端口被占用怎么办
+
+如果部署前 `43866` 或 `43867` 已被别的程序占用，先关掉那个程序或改它的端口，再部署。
+
+不建议改这套配置的端口号：端口写在 Clash 脚本、Claude Code 设置、Desktop 策略、快捷方式和检查脚本里，改一个就要同步几十处。确实要改时，按 Skill 的 [SOP-3 改端口流程](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md)操作，并用 `Check-PortConsistency.ps1` 核对没有遗漏。
+
+## 工作原理
+
+| 层 | 做了什么 |
+|---|---|
+| Clash | 全局扩展脚本新建 `ACCOUNT-US` 组，Claude 域名、IP 段和 `43866` / `43867` 的流量都进这个组；国内流量照常直连 |
+| 系统 | 网卡、Clash、DNS 三层关闭 IPv6；开 TUN、关系统代理；防火墙阻断直连 Anthropic 官方 IP 段 |
+| 程序 | Claude Code 的代理环境变量、专用 Chrome 的启动参数、Desktop 的 HKLM 策略都写死各自的端口；直连防护（WFP）在内核层拦截这些程序绕过代理的出站 |
+
+`ACCOUNT-US` 是手选组：节点挂了就停在那里失败，不会自动换节点，也不会退回直连。
+
+想了解细节，按这个顺序看：
+
+1. [架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)：每个配置点的含义，出问题定位到哪一层（下载后双击打开）。
+2. [规则顺序与三道硬拦](docs/配置/Claude环境/README.md#规则匹配顺序)：规则怎么匹配、系统层拦什么。
+3. [DNS 分层说明](docs/配置/Claude环境/说明/DNS分层说明.md)、[账号浏览器](docs/配置/Claude环境/说明/账号浏览器.md)：DNS、IPv6 和专用 Chrome 的每个参数。
+
+## 日常使用
+
+| 要做什么 | 怎么做 |
+|---|---|
+| 每天开工前检查 | 双击桌面「Claude-五项自检」，或看[日常使用](docs/配置/Claude环境/说明/日常使用.md) |
+| 全量检查 | 双击桌面「Claude-环境一键总检」 |
+| 看三端要不要更新 | `pwsh -NoProfile -File docs\配置\Claude环境\Desktop防护\更新三端Claude.ps1 -Action Check` |
+| 更新三端 | 退出全部 Claude 后双击桌面「Claude-三端更新」，细节见[更新维护说明](docs/配置/Claude环境/Desktop防护/更新维护说明.md) |
+
+桌面图标在部署第 7 步创建。Claude Desktop 的自动更新保持关闭，由你手动触发更新。
 
 ## 常见问题
 
 <details>
-<summary><b>要我自己手动配吗？</b></summary>
-
-不用。把文件夹当项目打开，对我说「按 AGENTS.md 帮我部署」，我一步步做。只有[需要你亲手做](#需要你亲手做ai-替不了)的那几件我替不了。
-</details>
-
-<details>
 <summary><b>需要一直开着 Clash 吗？</b></summary>
 
-需要。它是唯一出口。关了三个入口全断——这是设计如此，不会绕过。
+需要。它是唯一出口，关了三个程序都会断网，这是设计如此。
 </details>
 
 <details>
-<summary><b>上不去 Claude 了，先查什么？</b></summary>
+<summary><b>突然上不去 Claude，先查什么？</b></summary>
 
-1. Verge 里 `ACCOUNT-US` 选的节点是否还可用
-2. Clash 是否在运行、TUN 是否开着
+1. Verge 里 `ACCOUNT-US` 选的节点是否还能用。
+2. Clash 是否在运行、TUN 是否开着。
+3. 跑[端口自查](#在你的机器上自查)，看三个端口是否都由 `verge-mihomo` 监听。
 
-配置写对了不会导致突然不通，多半是节点或 Clash 停了。
+配置写对了不会突然失效，多半是节点挂了或 Clash 停了。
 </details>
 
 <details>
 <summary><b>国内网站会走代理吗？</b></summary>
 
-不会。`GEOSITE,cn` / `GEOIP,CN` 命中即直连；Claude 规则只是排在它们前面。
+不会。订阅原有的 `GEOSITE,cn` / `GEOIP,CN` 规则照常直连，Claude 规则只是排在它们前面。
 </details>
 
 <details>
-<summary><b>会偷偷直连、暴露真实 IP 吗？</b></summary>
+<summary><b>换节点、换订阅要重新配置吗？</b></summary>
 
-不会。三个入口的代理都是写死的，不通就失败。
-</details>
+不用。Claude 的专用组、置顶规则和两个监听端口都在全局扩展脚本里，跟订阅无关。换节点或导入新订阅后，回到 `ACCOUNT-US` 重新手选一个节点，再跑一次总检即可。
 
-<details>
-<summary><b>默认桌面那个 Chrome 快捷方式为什么没参数？</b></summary>
-
-它是日常浏览器。加了参数会把所有流量送去美国、账号隔离也会失效。要用专用浏览器就从「专用 Chrome」快捷方式进。
-</details>
-
-<details>
-<summary><b>换节点 / 换订阅要重配吗？</b></summary>
-
-都不用改任何配置。
-
-- **换节点**：在 Verge「代理」页里给 `ACCOUNT-US` 重新手选一个即可。
-- **换订阅**：Claude 的专用组、置顶规则和两个端口都写在 Clash 的**全局扩展脚本**里，跟订阅解耦，导入新订阅后脚本一行不用改。你只需回到 `ACCOUNT-US` **手选一个节点**（自动填充不会自动选中），再跑一次五项自检 / 一键总检确认出口没变。
-
-本套**不需要**任何「订阅级 rules 覆写」，也没有要你在订阅侧补的东西。
+换订阅不会改混合端口；如果重装或重置过 Verge，跑一次[端口自查](#在你的机器上自查)确认它还是 `43865`。
 </details>
 
 <details>
 <summary><b>一个专用浏览器能登几个账号？</b></summary>
 
-一个。多账号就多建几个专用浏览器。别用 Chrome 自带「添加用户」——它在同一个数据目录里多开 Profile，达不到隔离。
+一个。多账号就多建几个专用浏览器。不要用 Chrome 自带的「添加用户」，它共用同一个数据目录，达不到隔离。
 </details>
 
 <details>
-<summary><b>什么是「直连防护（WFP）」？</b></summary>
+<summary><b>什么是直连防护（WFP）？</b></summary>
 
-WFP 是 Windows 内核自带的网络过滤框架（Windows 防火墙本身就建在它上面）。这套配置用它给指定 EXE 加规则：**只能走本机回环（也就是代理），想自己连外网就被内核拦掉**。
+WFP 是 Windows 内核自带的网络过滤框架。这套配置用它给指定程序加规则：只允许连本机回环（也就是代理），想直接连外网就被内核拦下。防火墙规则拦的是目标 IP，WFP 拦的是发起程序，所以更严。
 
-和防火墙规则的区别：防火墙规则拦的是「目标 IP 段」，WFP 拦的是「发起程序」。所以 WFP 更严——它不管你要连哪，只要是绕开代理的直接出站就拦。
-
-规则原文见 [Desktop防护/应用直连过滤.cs](docs/配置/Claude环境/Desktop防护/应用直连过滤.cs)：`Exact EXE AND not IS_LOOPBACK`，IPv4 / IPv6 各一条。
-
-程序路径、文件哈希、GUID 每台机器都不同，所以分享包里只有一个示例文件，要在本机生成。
+程序路径、文件哈希、规则 GUID 每台机器都不同，分享包里只有[示例文件](docs/配置/Claude环境/Desktop防护/应用过滤目标.示例.json)，部署时在本机生成。
 </details>
-
----
-
-## 首次打开会看到的报错
-
-这个分享包**故意不含**本机的状态文件、指纹和 GUID —— 导入别人的会失效，甚至拦错程序。所以刚拿到手时会有几项检查报错，做完对应步骤就消失：
-
-| 现象 | 原因 | 何时消失 |
-|---|---|---|
-| 一键总检：直连防护项 `FAIL` | `应用过滤目标.json` 要在本机按示例生成（真实路径 + 审核 SHA256 + 新 GUID）后再安装 | 完成部署第 6 步 |
-| 一键总检：网段阻断项 `FAIL` | `160.79.104.0/23` 防火墙规则还没创建 | 完成第 6a 步 |
-| Skill 自检：快捷方式备份项 `WARN` | 还没把桌面快捷方式复制进 Skill 的 `assets/shortcuts/` | 完成第 7 步 |
-| 跑 `应用直连防护管理.ps1 -Action Verify` 报「找不到 应用过滤目标.json」 | 同上，该清单是本机产物，不随包分发 | 完成第 6 步 |
-| 跑上面这条报 `0x00000005` / 拒绝访问 | 读取 WFP 规则需要管理员权限。**「拒绝访问」不等于「没装」**，只是没权限看 | 用管理员开 PowerShell 7 再跑 |
-
-这些报错**不代表环境坏了**，只代表「这一步还没做」。
-
----
-
-## 日常维护：三端更新
-
-Claude Code CLI、VS Code 插件、Claude Desktop 的版本更新由一个入口完成，更新时 Desktop 的自动更新保持关闭，由你手动触发：
-
-```powershell
-# 只看三端要不要更新：不下载、不提权、不改文件，Claude 开着也能跑
-pwsh -NoProfile -File docs\配置\Claude环境\Desktop防护\更新三端Claude.ps1 -Action Check
-```
-
-- **要更新时**：先退出全部 Claude，再运行同一个脚本（不带参数）。脚本会按需安装新版本、登记受保护程序的指纹，并只弹一次 UAC 完成安装与验证。
-- **桌面图标**：完成部署第 7 步后，桌面会有「Claude-三端更新」，等同于上面的脚本。
-- **安全边界**：文件指纹与清单不同时，必须带有效的 Anthropic 签名才放行；脚本不会结束进程、不会改策略、不会启动 Claude。
-- **更多细节**：[更新维护说明](docs/配置/Claude环境/Desktop防护/更新维护说明.md)、Skill [claude-maintenance](.agents/skills/claude-maintenance/SKILL.md)。
-
----
-
-## 这套东西包含什么
-
-| 层 | 做什么 | 位置 |
-|---|---|---|
-| Clash | Claude 域名固定走 `ACCOUNT-US`；三个专用端口 `43865` / `43866` / `43867`；DNS 分层 | [Clash/](docs/配置/Claude环境/Clash/) |
-| 系统 | IPv6 三层关闭；TUN 开、系统代理关；`160.79.104.0/23` 直连出站阻断；关定位、杀软白名单 | [说明/DNS分层说明.md](docs/配置/Claude环境/说明/DNS分层说明.md)、[说明/Anthropic网段直连阻断.md](docs/配置/Claude环境/说明/Anthropic网段直连阻断.md) |
-| Claude Code | `~/.claude/settings.json` 的 `env` 指向 `43865` | Skill `claude-safe-network` |
-| 专用 Chrome | 每个账号独立用户目录，SOCKS `43866`，防 DNS / WebRTC 泄漏 | [说明/账号浏览器.md](docs/配置/Claude环境/说明/账号浏览器.md) |
-| Claude Desktop | HKLM 策略走 `43867`、关自动更新、直连防护（WFP） | [Desktop防护/](docs/配置/Claude环境/Desktop防护/) |
-| 更新 | 三端版本检查与手动更新，更新后自动登记指纹 | [更新三端Claude.ps1](docs/配置/Claude环境/Desktop防护/更新三端Claude.ps1) |
-| 检查 | 一键总检、五项自检、9 层全量体检 | [Claude环境一键总检.ps1](docs/配置/Claude环境/Claude环境一键总检.ps1) + Skill `scripts/checks/` |
-
----
 
 ## 目录结构
 
 ```text
 Claude环境分享版/
-├─ AGENTS.md                        给 AI 的部署流程和维护约束
-├─ CLAUDE.md                        一行 @AGENTS.md，让 Claude 读同一份约定
-├─ README.md                        本文件
-├─ docs/配置/Claude环境/            日常使用的脚本和说明（部署后桌面图标指向这里）
-│  ├─ Claude环境一键总检.ps1        只读总检
-│  ├─ Anthropic网段直连阻断.ps1      检查或安装 160.79.104.0/23 出站阻断
-│  ├─ 启动Claude英文浏览器.ps1        检查通过才启动 Desktop
-│  ├─ 清理维护残留.ps1               列出并清理过期备份；默认只列不删
-│  ├─ 维护日志.md                    最近一轮维护的结论与证据
-│  ├─ Clash/                        全局脚本副本、通道验证、五项自检
-│  ├─ Desktop防护/                  直连防护、43867 通道、自动更新开关、三端更新入口
-│  ├─ assets/                       图解资料与图标（总架构图 + 两张参考 PNG）
-│  └─ 说明/                         架构讲解.html 及四份说明
+├─ AGENTS.md                 给 AI 的部署步骤和维护约束
+├─ CLAUDE.md                 一行 @AGENTS.md，让 Claude 读同一份约定
+├─ docs/配置/Claude环境/     日常使用的脚本和说明（桌面图标指向这里）
+│  ├─ Clash/                 全局扩展脚本、通道验证、五项自检
+│  ├─ Desktop防护/           直连防护、43867 通道、三端更新
+│  ├─ 说明/                  架构讲解和四份专题说明
+│  └─ assets/                架构图与图标
 └─ .agents/skills/
-   ├─ claude-safe-network/          安装、检查、排障、回滚工具（含一键更新）
-   └─ claude-maintenance/           Desktop / CLI 更新流程
+   ├─ claude-safe-network/   安装、检查、排障、回滚工具
+   └─ claude-maintenance/    Desktop / CLI 更新流程
 ```
 
----
+脚本按「脚本目录往上 3 层 = 项目根」定位，不要改目录名或层级。各文件用途见 [docs 总览](docs/配置/Claude环境/README.md)。
 
-## 边界与平台要求
+## 边界与许可
 
-| 项 | 说明 |
-|---|---|
-| **只保证** | 出口干净、不泄漏、不绕过代理 |
-| **不做** | 规避检测、伪装身份、绕过 Anthropic 的地区或账号规则；使用前请确认你所在地区和付款方式符合 Anthropic 条款 |
-| **平台** | Windows 10 / 11 + Clash Verge Rev（mihomo 内核）+ PowerShell 7，仅此三种 |
-| **许可** | [MIT License](LICENSE)，可自由使用、修改和分发；脚本会改动系统网络与防火墙设置，风险由使用者自负 |
+- **只保证**：出口固定、不泄漏、不绕过代理。
+- **不做**：规避检测、伪装身份、绕过 Anthropic 的地区或账号规则。使用前请确认你所在地区和付款方式符合 Anthropic 条款。
+- **许可**：[MIT License](LICENSE)。脚本会改动系统网络和防火墙设置，风险由使用者自负。
 
----
-
-如果这套配置帮你省了排障的时间，欢迎点个 [Star](https://github.com/xgz123-wq/claude-env-share)；遇到问题或有改进建议，请提 [Issue](https://github.com/xgz123-wq/claude-env-share/issues)。
+问题和建议请提 [Issue](https://github.com/xgz123-wq/claude-env-share/issues)；如果它帮你省了排障时间，欢迎点个 Star。
