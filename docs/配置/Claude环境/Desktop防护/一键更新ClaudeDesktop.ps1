@@ -94,11 +94,11 @@ try {
         }
         if ($ResumeJournal) { $ResumeJournal = (Resolve-Path -LiteralPath $ResumeJournal).Path }
     }
-    # Docs 是唯一维护源；从技能副本调用时也回到同项目 Docs。
+    # Docs 是唯一维护源；向上找项目根，再定位 Docs 里的防护目录。
     $root = [IO.DirectoryInfo]$PSScriptRoot
     $relativeSource = 'Docs\配置\Claude环境\Desktop防护'
     while ($null -ne $root -and -not (Test-Path -LiteralPath (Join-Path $root.FullName $relativeSource))) { $root = $root.Parent }
-    if ($null -eq $root) { throw '找不到同项目的 Docs 维护源；停止，避免把技能副本当作独立配置。' }
+    if ($null -eq $root) { throw '找不到同项目的 Docs 维护源；停止。' }
     $source = Join-Path $root.FullName $relativeSource
     $entry = Join-Path $source '一键更新ClaudeDesktop.ps1'
     if ($Worker) {
@@ -174,16 +174,7 @@ try {
     $result.HashCount = @($verified.Targets | Where-Object BinaryUnchanged).Count
     $result.FiltersCount = @($verified.Targets | ForEach-Object Filters).Count
     if ($result.HashCount -ne 4 -or $result.FiltersCount -ne 8) { throw '预期的四个程序文件或八条防护规则不完整。' }
-    $destination = Join-Path $root.FullName '.agents\skills\claude-safe-network\scripts\desktop\维护文件'
-    if (-not (Test-Path -LiteralPath $destination)) { throw '技能维护副本目录缺失。' }
-    $result.SynchronizedFiles = @()
-    foreach ($name in @('应用过滤目标.json','应用直连防护状态.json','应用直连防护-Verify.json','应用直连防护-最近操作.json','更新ClaudeDesktop.ps1','一键更新ClaudeDesktop.ps1')) {
-        $from = Join-Path $source $name
-        $to = Join-Path $destination $name
-        Copy-Item -LiteralPath $from -Destination $to -Force
-        if ((Get-FileHash -LiteralPath $from).Hash -ne (Get-FileHash -LiteralPath $to).Hash) { throw ('维护副本不同步：' + $name) }
-        $result.SynchronizedFiles += $name
-    }
+    # 2026-10-26 起 Skill 不再保存脚本与状态副本，这里不再同步。
     $summaryArgs = @()
     if ($ChangedOnly) { $summaryArgs = @('-Scope','Guard') }
     $result.SummaryScope = if ($ChangedOnly) { 'Guard' } else { 'All' }

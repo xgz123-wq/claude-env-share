@@ -47,10 +47,19 @@ param(
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
-$__d = $PSScriptRoot
-while ($__d -and -not (Test-Path (Join-Path $__d 'Common.ps1'))) { $__d = Split-Path $__d -Parent }
-if (-not $__d) { throw 'Common.ps1 未找到，skill 目录不完整。' }
-. (Join-Path $__d 'Common.ps1')
+# 输出函数（原先来自 Skill 的 Common.ps1，2026-10-26 整合时内联，脚本不再依赖其他文件）
+function Write-Banner([string]$Title, [string]$Subtitle = '') {
+    $line = '=' * 74
+    Write-Host ''; Write-Host $line; Write-Host ('  ' + $Title)
+    if ($Subtitle) { Write-Host ('  ' + $Subtitle) }
+    Write-Host $line
+}
+function Write-Section([string]$Title) { Write-Host ''; Write-Host ('--- ' + $Title + ' ' + ('-' * 40)) }
+function Write-JsonResult($Payload) {
+    Write-Output '===JSON-BEGIN==='
+    $Payload | ConvertTo-Json -Depth 8
+    Write-Output '===JSON-END==='
+}
 
 # ---- 目标位置（唯一写入点）------------------------------------------------
 $leafRoot = 'HKCU:\Software\Classes\SystemFileAssociations\.ps1'

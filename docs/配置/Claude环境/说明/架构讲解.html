@@ -652,7 +652,7 @@
 <ul class="rv">
   <li><b>网卡那层</b>按网卡生效，换 Wi-Fi 不用重做；插了新网卡（USB 网卡等）要重新取消勾选。命令等价操作（管理员）：<code>Disable-NetAdapterBinding -Name 'WLAN' -ComponentID ms_tcpip6</code></li>
   <li><b>虚拟网卡不用管</b>：Mihomo（TUN）、蓝牙、WSL 等虚拟网卡的 IPv6 勾由驱动管，取消了也会自己恢复；它们没有公网 IPv6 地址，形不成泄漏。验收看检测页有没有公网 IPv6</li>
-  <li><b>自动检查</b>：五项自检会检查物理网卡的 IPv6 绑定</li>
+  <li><b>自动检查</b>：环境卫士的「IPv6 防漏」会查公网 IPv6 地址并实测能否直连 IPv6</li>
 </ul>
 
 <h2 id="s5" class="anchor rv"><span class="n">陆</span>第四步 · Claude Code 的代理</h2><div class="rule rv"></div>
@@ -748,8 +748,8 @@
   <div class="col must"><div class="ch">Claude-环境一键总检</div>
     <ul><li>只读检查所有层：Clash、DNS、三入口一致、Desktop 代理和自动更新、直连防护、国内连通</li><li>每天开工前点一次；有 FAIL 就停下交给 AI</li></ul>
   </div>
-  <div class="col must"><div class="ch">Claude-五项自检</div>
-    <ul><li>专查 Clash 通道和网卡 IPv6</li><li>结束后自动打开账号 1 专用 Chrome 的检测页，给你肉眼确认</li></ul>
+  <div class="col must"><div class="ch">Claude 环境卫士</div>
+    <ul><li>日常主入口：30 项体检，含 IPv6、时区语言、浏览器参数</li><li>深度总检、检查后启动 Desktop、三端更新都在里面</li></ul>
   </div>
   <div class="col opt"><div class="ch">Claude-英文浏览器</div>
     <ul><li>先检查防护和代理，全部通过才启动 Claude Desktop</li><li>检查不过会拒绝启动</li></ul>
@@ -813,7 +813,7 @@
 <tr><td>「DNS 防旁路」FAIL</td><td>系统层</td><td>TUN 的 <code>dns-hijack</code> / <code>strict-route</code> 被覆盖；检查全局脚本是否还在</td></tr>
 <tr><td>「国内连通」FAIL</td><td>Clash 层</td><td>普通 DNS 被改坏；或在 Desktop 会话里检测时被注入了 <code>43867</code> 代理（误报，去掉代理变量再测）</td></tr>
 <tr><td>检测站显示 IPv6 或 WebRTC 泄漏</td><td>系统层 / 应用层</td><td>IPv6 三层逐个查；WebRTC 查专用 Chrome 的 <code>chrome://version</code></td></tr>
-<tr><td>出口在意外国家、IP 被标为机房</td><td>出口层</td><td>节点问题，换节点后重跑五项自检和总检</td></tr>
+<tr><td>出口在意外国家、IP 被标为机房</td><td>出口层</td><td>节点问题，换节点后重跑卫士体检和总检</td></tr>
 <tr><td>Claude Code 连不上，Desktop 正常</td><td>应用层</td><td><code>settings.json</code> 的端口是否 <code>43865</code>；<code>ANTHROPIC_BASE_URL</code> 指向哪里</td></tr>
 </table></div>
 
@@ -823,7 +823,7 @@
 <tr><th>坑</th><th>后果</th><th>怎么避</th></tr>
 <tr><td>用了 IP-ASN 规则但没有 ASN 数据库</td><td class="no">整份配置加载失败（不是规则失效，是全部规则都没了，直接断网）</td><td>全局脚本已配 <code>geox-url.asn</code> 并每日更新</td></tr>
 <tr><td>把 <code>client-fingerprint</code> 写成 <code>fingerprint</code></td><td class="no">节点直接连不上</td><td><code>fingerprint</code> 是服务端证书指纹；多数订阅已自带 <code>client-fingerprint</code>，先看再改</td></tr>
-<tr><td>只关了一层 IPv6</td><td class="no">IPv6 流量绕过代理直连</td><td>三层都关，五项自检会查</td></tr>
+<tr><td>只关了一层 IPv6</td><td class="no">IPv6 流量绕过代理直连</td><td>三层都关，卫士会查</td></tr>
 <tr><td>规则指向不存在的代理组</td><td class="no">静默失效，看着正常实际没生效</td><td>脚本自建组，不引用订阅组名</td></tr>
 <tr><td>把全机 DNS 改成国外 DoH</td><td class="no">国内应用（飞书、企业内网）全部断网</td><td>只给 Claude 域名换解析器</td></tr>
 <tr><td>改完配置没应用或重载</td><td class="no">以为生效了其实没有</td><td>由用户在 Clash Verge 中应用或重载，再运行验证脚本读取运行态</td></tr>
@@ -842,7 +842,7 @@
 
 <div class="tw rv"><table>
 <tr><th>例行事</th><th>怎么做</th></tr>
-<tr><td><b>换订阅</b></td><td>导入新订阅 → 在 <code>ACCOUNT-US</code> 里手选节点 → 跑五项自检 + 一键总检。全局脚本不用动</td></tr>
+<tr><td><b>换订阅</b></td><td>导入新订阅 → 在 <code>ACCOUNT-US</code> 里手选节点 → 跑卫士体检 + 一键总检。全局脚本不用动</td></tr>
 <tr><td><b>软件更新</b></td><td>对 AI 说「更新 Claude Desktop」「更新 Claude Code CLI」，或「我已手动更新，请同步」；AI 按 claude-maintenance 流程处理指纹和防护</td></tr>
 </table></div>
 

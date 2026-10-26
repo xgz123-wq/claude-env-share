@@ -6,8 +6,8 @@ $globalScript = Join-Path $base 'profiles\Script.js'
 $runtimeConfig = Join-Path $base 'clash-verge.yaml'
 $checkConfig = Join-Path $base 'clash-verge-check.yaml'
 $vergeConfig = Join-Path $base 'verge.yaml'
-# 本脚本在 scripts\apply\，全局扩展脚本在 scripts\clash\（搬迁后同级拆分，不能再用 $PSScriptRoot 直取）
-$sourceScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'clash\Clash全局账号通道.js'
+# 本脚本在 工具\，全局扩展脚本在同级的 Clash\
+$sourceScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'Clash\Clash全局账号通道.js'
 $core = 'C:\Program Files\Clash Verge\verge-mihomo.exe'
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backupDir = Join-Path $base (Join-Path 'account-routing-backups' ($timestamp + '-阶段2-账号通道'))

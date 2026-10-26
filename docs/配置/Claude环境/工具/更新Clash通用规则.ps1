@@ -3,12 +3,12 @@ $ErrorActionPreference = 'Stop'
 if ($env:CLAUDE_ALLOW_CLASH_RESTART -ne '1') { throw '本脚本会停止并重启 Clash 界面与内核，会让 Clash 掉线；日常更新只走热重载。确需运行时先设置 CLAUDE_ALLOW_CLASH_RESTART=1。' }
 $base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $backupRoot = Join-Path $base 'account-routing-backups'
-$sourceScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'clash\Clash全局账号通道.js'
+$sourceScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'Clash\Clash全局账号通道.js'
 $installedScript = Join-Path $base 'profiles\Script.js'
 $runtimeConfig = Join-Path $base 'clash-verge.yaml'
 $checkConfig = Join-Path $base 'clash-verge-check.yaml'
 $clashApp = 'C:\Program Files\Clash Verge\clash-verge.exe'
-$validator = Join-Path (Split-Path $PSScriptRoot -Parent) 'clash\验证Clash账号专用通道.ps1'
+$validator = Join-Path (Split-Path $PSScriptRoot -Parent) 'Clash\验证Clash账号专用通道.ps1'
 # 一律用 PowerShell 7 调子脚本：本套件脚本是无 BOM UTF-8 中文，5.1 会按 ANSI 解析而乱码/失败
 $pwshExe = (Get-Process -Id $PID).Path
 if (-not $pwshExe -or $pwshExe -notlike '*pwsh.exe') { $pwshExe = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe' }

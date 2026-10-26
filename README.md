@@ -103,7 +103,7 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 
 如果部署前 `43866` 或 `43867` 已被别的程序占用，先关掉那个程序或改它的端口，再部署。
 
-不建议改这套配置的端口号：端口写在 Clash 脚本、Claude Code 设置、Desktop 策略、快捷方式和检查脚本里，改一个就要同步几十处。确实要改时，按 Skill 的 [SOP-3 改端口流程](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md)操作，并用 `Check-PortConsistency.ps1` 核对没有遗漏。
+不建议改这套配置的端口号：端口写在 Clash 脚本、Claude Code 设置、Desktop 策略、快捷方式和检查脚本里，改一个就要同步几十处。确实要改时，按 Skill 的 [SOP-3 改端口流程](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md)操作，先按 SOP 里的 grep 命令列出所有出现位置。
 
 ## 工作原理
 
@@ -125,8 +125,7 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 
 | 要做什么 | 怎么做 |
 |---|---|
-| 每天开工前检查 | 双击桌面「Claude-五项自检」，或看[日常使用](docs/配置/Claude环境/说明/日常使用.md) |
-| 全量检查 | 双击桌面「Claude-环境一键总检」 |
+| 每天开工前检查 | 双击桌面「Claude-环境一键总检」，再按[日常使用](docs/配置/Claude环境/说明/日常使用.md)做网页验收 |
 | 看三端要不要更新 | `pwsh -NoProfile -File docs\配置\Claude环境\Desktop防护\更新三端Claude.ps1 -Action Check` |
 | 更新三端 | 退出全部 Claude 后双击桌面「Claude-三端更新」，细节见[更新维护说明](docs/配置/Claude环境/Desktop防护/更新维护说明.md) |
 
@@ -185,12 +184,13 @@ Claude环境分享版/
 ├─ AGENTS.md                 给 AI 的部署步骤和维护约束
 ├─ CLAUDE.md                 一行 @AGENTS.md，让 Claude 读同一份约定
 ├─ docs/配置/Claude环境/     日常使用的脚本和说明（桌面图标指向这里）
-│  ├─ Clash/                 全局扩展脚本、通道验证、五项自检
+│  ├─ Clash/                 全局扩展脚本、通道验证、官方域名复核
 │  ├─ Desktop防护/           直连防护、43867 通道、三端更新
+│  ├─ 工具/                  完整性检查与一次性安装、回滚工具
 │  ├─ 说明/                  架构讲解和四份专题说明
 │  └─ assets/                架构图与图标
 └─ .agents/skills/
-   ├─ claude-safe-network/   安装、检查、排障、回滚工具
+   ├─ claude-safe-network/   排障说明（命令指回 docs）
    └─ claude-maintenance/    Desktop / CLI 更新流程
 ```
 

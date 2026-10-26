@@ -20,7 +20,7 @@
 
 - **命令等价操作**（管理员）：`Disable-NetAdapterBinding -Name 'WLAN' -ComponentID ms_tcpip6`；查看用 `Get-NetAdapterBinding -ComponentID ms_tcpip6`。
 - **作用范围**：按网卡生效，同一张网卡换 Wi-Fi 不用重做；新增网卡（USB 网卡、新无线网卡）要重新取消勾选。
-- **自动检查**：五项自检和 Skill `Check-WindowsFallback.ps1` 会检查物理网卡 IPv6 绑定，未关闭时报出。
+- **自动检查**：环境卫士 S4「IPv6 防漏」检查公网 IPv6 地址和 `DisabledComponents`，并实测能否直连 IPv6。
 - **现状结论**：本机没有公网 IPv6 地址，也没有 IPv6 默认路由。
 
 ## 维护与验收
@@ -53,9 +53,9 @@
 
 **归类规则**：被 `Clash全局账号通道.js` 里 Claude 域名后缀覆盖的记为已覆盖，如 `platform.claude.com`、`downloads.claude.ai`、`bridge.claudeusercontent.com`；在 `$sharedHosts` 里的记为共享，如 npm、GitHub、Google Storage、Datadog、字体与脚本 CDN；其余都是未归类。共享域名不全局绑定 `ACCOUNT-US`。
 
-**运行**：`pwsh -NoProfile -File docs\配置\Claude环境\Clash\检查Claude官方域名.ps1`，输出 JSON；`-OfflineDir <目录>` 可用已下载的 `network-config.md`、`desktop.md` 离线测试。Skill 副本 `scripts/clash/检查Claude官方域名.ps1` 与它逐字节相同。
+**运行**：`pwsh -NoProfile -File docs\配置\Claude环境\Clash\检查Claude官方域名.ps1`，输出 JSON；`-OfflineDir <目录>` 可用已下载的 `network-config.md`、`desktop.md` 离线测试。
 
-**新增域名后**：由用户更新；模型只读核对 `Script.js`、Claude 专用 DNS policy、通道验证脚本、Skill 副本和运行配置是否都带上新规则、顺序是否在宽泛规则之前，有真实连接证据时再看脱敏的 Mihomo 目标域名、入站、规则、组和出口。
+**新增域名后**：由用户更新；模型只读核对 `Script.js`、Claude 专用 DNS policy、通道验证脚本和运行配置是否都带上新规则、顺序是否在宽泛规则之前，有真实连接证据时再看脱敏的 Mihomo 目标域名、入站、规则、组和出口。
 
 **规则来源**：Anthropic Desktop 网络要求列出 `claude.app` 及动态子域，因此本分享版的规则模板包含 `DOMAIN-SUFFIX,claude.app` 与 `+.claude.app`；部署后的实际访问和出口要在使用者机器上验证。CLI 官方清单未把它列为独立的 CLI 必需域名。
 
@@ -65,4 +65,4 @@
 |---|---|
 | [Claude 配置总览](../README.md) | 统一入口，先读 |
 | `%APPDATA%\io.github.clash-verge-rev.clash-verge-rev\profiles\Script.js` | 需现场核对的 Clash 全局脚本 |
-| `../Clash/Clash全局账号通道.js` | 项目副本；2026-09-23 与现场 `Script.js`、Skill 副本三处哈希一致，维护前仍先比较 |
+| `../Clash/Clash全局账号通道.js` | 项目副本（唯一一份）；维护前先与现场 `Script.js` 比较哈希 |

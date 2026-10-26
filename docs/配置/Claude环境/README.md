@@ -10,13 +10,14 @@
 | `Claude环境一键总检.ps1` | 桌面「Claude-环境一键总检」，只读检查 |
 | `Anthropic网段直连阻断.ps1` | 检查或安装 `160.79.104.0/23` 出站阻断规则；默认只读 |
 | `启动Claude英文浏览器.ps1`、`Claude官方图标.ico` | 桌面「Claude-英文浏览器」，检查通过才启动 Desktop |
-| `Clash/` | Clash 全局脚本副本（与现场 `Script.js` 一致）、通道验证脚本、桌面「Claude-五项自检」 |
+| `Clash/` | Clash 全局脚本副本（与现场 `Script.js` 一致）、通道验证脚本、官方域名复核脚本 |
 | `Desktop防护/` | Desktop/Code 直连防护、三端更新入口（`更新三端Claude.ps1`，桌面「Claude-三端更新」）、Desktop 受控更新、43867 通道管理、自动更新开关，以及运行状态 json |
+| `工具/` | `检查脚本完整性.ps1`（改了脚本或文档后跑）；一次性工具：安装账号通道、修复 DNS、更新 Clash 通用规则、创建账号浏览器、回滚 Clash 配置、PS7 右键入口 |
 | `说明/` | [日常使用](说明/日常使用.md)、[Anthropic 网段直连阻断](说明/Anthropic网段直连阻断.md)、[账号浏览器](说明/账号浏览器.md)、[DNS 分层](说明/DNS分层说明.md)、[架构讲解](说明/架构讲解.html)（图解，双击打开） |
 | `维护日志.md` | 最近一轮维护的结论与证据，更早的压成历史表 |
 | `清理维护残留.ps1` | 列出并清理过期备份与遗留安装包（默认只列清单，加 `-Yes` 才删） |
 
-- **一次性工具**：安装、回滚、修复 DNS、创建账号浏览器等只在 Skill [claude-safe-network](../../../.agents/skills/claude-safe-network/SKILL.md) 的 `scripts/` 里，本目录不放副本。
+- **Skill**：[claude-safe-network](../../../.agents/skills/claude-safe-network/SKILL.md) 是给 AI 的排障说明，命令都指回本目录；一次性工具在 `工具/`。
 
 ## 当前状态（原机器 2026-09-25 参考值，新机器以实测为准）
 
@@ -89,7 +90,6 @@
 | 一键总检：直连防护项 `FAIL` | `应用过滤目标.json` 要在本机按示例生成（真实路径 + 审核 SHA256 + 新 GUID）后再安装 | AGENTS.md 第 6 步完成后 |
 | 一键总检：网段阻断项 `FAIL` | `160.79.104.0/23` 防火墙规则还没创建 | 第 6a 步完成后 |
 | 一键总检：Claude 三入口一致性项 `FAIL` | Verge 混合端口不是 `43865` | 按根目录 README「端口说明」改端口后 |
-| Skill 自检：快捷方式备份项 `WARN` | 还没把桌面快捷方式复制进 Skill 的 `assets/shortcuts/` | 第 7 步完成后 |
 | `应用直连防护管理.ps1 -Action Verify` 报「找不到 应用过滤目标.json」 | 该清单是本机产物，不随包分发 | 第 6 步完成后 |
 | 同一条命令报 `0x00000005` / 拒绝访问 | 读取 WFP 规则需要管理员权限；拒绝访问不等于没装 | 用管理员开 PowerShell 7 再跑 |
 

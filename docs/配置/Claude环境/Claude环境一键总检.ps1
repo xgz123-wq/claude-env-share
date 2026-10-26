@@ -3,8 +3,10 @@ param(
   [switch] $OpenBrowser,
   # Guard：只查 Desktop 策略与直连防护，供一键更新在 UAC 内复核这次动过的项；默认 All 与原来一致。
   [ValidateSet('All','Guard')][string] $Scope = 'All',
-  # 环境卫士「深度总检」按钮用：结果另写一份 JSON（字段同 Skill 版 -Json）；不传时行为不变。
-  [string] $ResultPath
+  # 环境卫士「深度总检」按钮用：结果另写一份 JSON（字段：ok、pass、warn、fail、manual、results）；不传时行为不变。
+  [string] $ResultPath,
+  # 日常使用的专用浏览器快捷方式，-OpenBrowser 打开它；其他专用浏览器只检查不打开。
+  [string] $DailyBrowser = 'Claude-账号1-专用Chrome.lnk'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -114,7 +116,8 @@ if ($Scope -eq 'All') {
     try {
       $baseResult = $raw | ConvertFrom-Json
       if ($baseResult.Success) {
-        Add-Result PASS 'Rule / TUN / Claude 规则' '基础验证 18/18；Clash 配置语法通过'
+        $baseCount = @($baseResult.Checks.PSObject.Properties).Count
+        Add-Result PASS 'Rule / TUN / Claude 规则' "基础验证 $baseCount/$baseCount；Clash 配置语法通过"
         Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
         Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；43866 出口：$($baseResult.SocksPublicIp)"
       } else {
@@ -161,27 +164,31 @@ if ($Scope -eq 'All') {
     Add-Result FAIL 'Claude 三入口一致性' ('43865/43866/43867：' + ($exitIps -join ' / '))
   }
 
-  $browserShortcuts = @(
-    (Join-Path $desktop 'Claude-账号1-专用Chrome.lnk'),
-    (Join-Path $desktop 'Claude-账号2-专用Chrome.lnk')
-  )
+  # 桌面上 --user-data-dir 指向 ClaudeAccountBrowsers 的 Chrome 快捷方式都算专用浏览器，账号名从目录里取，不在脚本里写死。
+  $browserRoot = Join-Path $env:LOCALAPPDATA 'ClaudeAccountBrowsers'
+  $browserShortcuts = @(Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -File | ForEach-Object { Read-Shortcut $_.FullName } |
+    Where-Object { $_.Arguments.Contains($browserRoot + '\') } | ForEach-Object Path)
+  $dailyBrowserPath = Join-Path $desktop $DailyBrowser
+  if ($dailyBrowserPath -notin $browserShortcuts) {
+    Add-Result WARN $DailyBrowser '日常专用浏览器快捷方式不存在或没有指向 ClaudeAccountBrowsers'
+  }
   $readyBrowser = $null
   foreach ($shortcutPath in $browserShortcuts) {
     $shortcut = Read-Shortcut $shortcutPath
-    if ($null -eq $shortcut) {
-      Add-Result WARN ([IO.Path]::GetFileName($shortcutPath)) '快捷方式不存在'
-      continue
-    }
     $arguments = $shortcut.Arguments
+    $alias = if ($arguments -match [regex]::Escape($browserRoot + '\') + '([^\\"]+)\\UserData') { $Matches[1] } else { '' }
+    $expectedUserData = Join-Path $browserRoot (Join-Path $alias 'UserData')
     $ready =
-      ($arguments -like '*--user-data-dir=*') -and
-      ($arguments -like '*127.0.0.1:43866*') -and
+      ($shortcut.Target -like '*\chrome.exe') -and
+      (Test-Path -LiteralPath $expectedUserData) -and
+      ($arguments.Contains('--user-data-dir="' + $expectedUserData + '"')) -and
+      ($arguments.Contains('--proxy-server="socks5://127.0.0.1:43866"')) -and
       ($arguments -like '*--host-resolver-rules=*') -and
       ($arguments -like '*--lang=en-US*') -and
       ($arguments -like '*disable_non_proxied_udp*')
     if ($ready) {
       Add-Result PASS ([IO.Path]::GetFileName($shortcutPath)) '独立 User Data、43866、远端 DNS、en-US、WebRTC 防旁路参数齐全'
-      if ($null -eq $readyBrowser) { $readyBrowser = $shortcutPath }
+      if ($shortcutPath -eq $dailyBrowserPath) { $readyBrowser = $shortcutPath }
     } else {
       Add-Result FAIL ([IO.Path]::GetFileName($shortcutPath)) '专用浏览器参数不完整'
     }
@@ -336,6 +343,13 @@ if ($Scope -eq 'All') {
       Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
     }
   }
+
+  # hosts 里写死 Claude 域名会绕过 Clash 的 Claude 规则和 DNS 分流；环境卫士不查这一项。
+  $hostsFile = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+  $hostsHits = @(Get-Content -LiteralPath $hostsFile -ErrorAction SilentlyContinue |
+    Where-Object { $_ -notmatch '^\s*#' -and $_ -match '(?i)anthropic|claude|clau\.de' })
+  if ($hostsHits.Count) { Add-Result FAIL 'hosts 文件' ('有 Claude 相关条目：' + ($hostsHits -join '；')) }
+  else { Add-Result PASS 'hosts 文件' '没有 Claude / Anthropic 相关条目' }
 }
 
 Add-Result MANUAL '网页最终验收' '专用 Chrome / Desktop 内置浏览器分别确认：Claude IP、DNS、WebRTC、IPv6、语言和时区全绿'
@@ -384,7 +398,7 @@ if ($warnCount -gt 0) {
 
 if ($OpenBrowser) {
   if ($null -eq $readyBrowser) {
-    Write-Host '没有找到参数完整的专用 Chrome，未启动浏览器。' -ForegroundColor Red
+    Write-Host ("{0} 未就绪，未启动浏览器。" -f $DailyBrowser) -ForegroundColor Red
     exit 1
   }
   Start-Process -FilePath $readyBrowser
