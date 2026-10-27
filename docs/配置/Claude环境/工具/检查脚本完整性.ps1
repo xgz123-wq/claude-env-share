@@ -72,10 +72,23 @@ $required = @(
   'Desktop防护\一键更新ClaudeDesktop.ps1'
   'Desktop防护\更新ClaudeDesktop.ps1'
   'Desktop防护\应用直连防护管理.ps1'
+  '部署清单.示例.json'
+  '工具\读部署清单.ps1'
+  '工具\写部署清单.ps1'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $envRoot $_)) })
 if ($missing) { foreach ($m in $missing) { Add-Result FAIL '必需文件' "缺少 $m" } }
-else { Add-Result PASS '必需文件' "卫士与桌面图标依赖的 $($required.Count) 个文件在位" }
+else { Add-Result PASS '必需文件' "卫士、桌面图标与部署清单依赖的 $($required.Count) 个文件在位" }
+# 部署清单：示例文件是默认值来源，必须能读出三个端口；本机清单可以还没生成（跑一次一键总检生成），但有了就必须能读。
+$portNames = @('通用', '浏览器', 'Desktop')
+function Test-ManifestPorts($Json) { -not @($portNames | Where-Object { $p = $Json.'端口'.$_; -not ($p -is [long] -or $p -is [int]) -or $p -lt 1 -or $p -gt 65535 }) }
+$exampleJson = try { Get-Content -LiteralPath (Join-Path $envRoot '部署清单.示例.json') -Raw | ConvertFrom-Json } catch { $null }
+$localManifest = Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\部署清单.json'
+$localJson = if (Test-Path -LiteralPath $localManifest) { try { Get-Content -LiteralPath $localManifest -Raw | ConvertFrom-Json } catch { 'bad' } }
+if (-not $exampleJson -or -not (Test-ManifestPorts $exampleJson)) { Add-Result FAIL '部署清单' '部署清单.示例.json 读不出三个有效端口' }
+elseif ($null -eq $localJson) { Add-Result PASS '部署清单' '示例默认值有效；本机清单还没生成，跑一次一键总检生成' }
+elseif ($localJson -eq 'bad' -or -not (Test-ManifestPorts $localJson)) { Add-Result FAIL '部署清单' "本机清单读不出三个有效端口：$localManifest" }
+else { Add-Result PASS '部署清单' ('示例默认值有效；本机清单端口 ' + (($portNames | ForEach-Object { "$_=$($localJson.'端口'.$_)" }) -join '，')) }
 # 防护状态是本机安装直连防护后生成的，分享包里没有；缺了总检和启动器会拦，这里只提醒。
 $stateFiles = @('Desktop防护\应用过滤目标.json', 'Desktop防护\应用直连防护状态.json')
 $missingState = @($stateFiles | Where-Object { -not (Test-Path -LiteralPath (Join-Path $envRoot $_)) })
