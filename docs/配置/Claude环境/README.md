@@ -7,12 +7,13 @@
 
 | 位置 | 内容 |
 |---|---|
-| `Claude环境一键总检.ps1` | 桌面「Claude-环境一键总检」，只读检查 |
+| `Claude环境一键总检.ps1` | 桌面「Claude-环境一键总检」，只做检查；顺带按 Clash 刷新[部署清单](#部署清单) |
+| `部署清单.示例.json` | 部署清单的格式与默认端口（相当于 `.env.example`）；本机清单不在这里 |
 | `Anthropic网段直连阻断.ps1` | 检查或安装 `160.79.104.0/23` 出站阻断规则；默认只读 |
 | `启动Claude英文浏览器.ps1`、`Claude官方图标.ico` | 桌面「Claude-英文浏览器」，检查通过才启动 Desktop |
 | `Clash/` | Clash 全局脚本副本（与现场 `Script.js` 一致）、通道验证脚本、官方域名复核脚本 |
 | `Desktop防护/` | Desktop/Code 直连防护、三端更新入口（`更新三端Claude.ps1`，桌面「Claude-三端更新」）、Desktop 受控更新、43867 通道管理、自动更新开关，以及运行状态 json |
-| `工具/` | `检查脚本完整性.ps1`（改了脚本或文档后跑）；一次性工具：安装账号通道、修复 DNS、更新 Clash 通用规则、创建账号浏览器、回滚 Clash 配置、PS7 右键入口 |
+| `工具/` | `检查脚本完整性.ps1`（改了脚本或文档后跑）；`读部署清单.ps1`、`写部署清单.ps1`（各脚本共用，见[部署清单](#部署清单)）；一次性工具：安装账号通道、修复 DNS、更新 Clash 通用规则、创建账号浏览器、回滚 Clash 配置、PS7 右键入口 |
 | `说明/` | [日常使用](说明/日常使用.md)、[Anthropic 网段直连阻断](说明/Anthropic网段直连阻断.md)、[账号浏览器](说明/账号浏览器.md)、[DNS 分层](说明/DNS分层说明.md)、[架构讲解](说明/架构讲解.html)（图解，双击打开） |
 | `维护日志.md` | 最近一轮维护的结论与证据，更早的压成历史表 |
 | `清理维护残留.ps1` | 列出并清理过期备份与遗留安装包（默认只列清单，加 `-Yes` 才删） |
@@ -29,11 +30,23 @@
 | 直连防护 | 4 个程序、8 条 WFP 规则 |
 | 验证 | 一键总检 13 PASS / 1 MANUAL（2026-09-25） |
 
+端口是默认值，本机以[部署清单](#部署清单)为准：
+
 | 入口 | 路线 |
 |---|---|
 | Claude Code CLI / VS Code 插件 | HTTP `43865`，Claude 域名按规则进 `ACCOUNT-US` |
 | 专用 Chrome | SOCKS `43866 → ACCOUNT-US` |
 | Claude Desktop | HTTP `43867 → ACCOUNT-US` |
+
+## 部署清单
+
+- **是什么**：本机端口和路径的唯一记录，作用相当于这套环境的 `.env`，位置 `%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json`；不进 git、不进分享包，格式和默认值见 `部署清单.示例.json`。
+- **内容**：三个端口（`通用` = Clash 混合端口，默认 43865；`浏览器` = 专用 Chrome 的 SOCKS，默认 43866；`Desktop` = Claude Desktop 的 HTTP，默认 43867）、脚本根目录、登记的专用浏览器（别名、数据目录、快捷方式）。
+- **谁写**：一键总检每次运行从 Clash 运行配置 `clash-verge.yaml` 读端口（`mixed-port` 和 `account-us-socks` / `claude-desktop-http` 两个 listener）、扫桌面专用浏览器后刷新，内容没变不写；`工具/创建账号浏览器.ps1` 建完登记。两者都调 `工具/写部署清单.ps1`。
+- **谁读**：脚本点源 `工具/读部署清单.ps1` 后用 `Get-DeployPort 通用|浏览器|Desktop` 按名字取端口；清单不存在、读坏或缺某项时用示例默认值，并往 stderr 提示一行。环境卫士（v2.6.0 起）只读不写：端口、分享包位置、专用浏览器都先看清单，再实际核对。
+- **专用浏览器认定**：当前用户桌面上、参数含 `%LOCALAPPDATA%\ClaudeAccountBrowsers\<别名>\UserData` 的快捷方式，规则只写在 `读部署清单.ps1` 一处，总检和清单共用。
+- **改端口**：端口的源头是 Clash（混合端口在 Clash Verge 设置里，`浏览器`、`Desktop` 两个专用端口在 `Clash/Clash全局账号通道.js`），只在 Clash 一侧改，再跑一次一键总检刷新清单；不要手改清单，也不用改脚本。完整步骤见 Skill [claude-safe-network SOP-3](../../../.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md#sop-3-改端口或改组名)。
+- **仍写着默认端口的**：`部署清单.示例.json`（回退值）、`Desktop防护/独立网络探针.cjs`（打包成探针 exe，直连防护 Install / Verify 时用）、Clash 的 JS（端口定义处）；文档里的端口一律指默认值。
 
 ## 按任务阅读
 

@@ -1,5 +1,7 @@
 # Anthropic 网段直连阻断
 
+> 端口：文中 43865 / 43866 / 43867 是默认值，本机以部署清单为准，见 [README「部署清单」](../README.md#部署清单)。
+
 ## 结论与操作
 
 `160.79.104.0/23` 的直连出站由 Windows 防火墙阻断；访问该网段时，应用仍可先连接本机 Clash 代理。现有入口为 Claude Code HTTP `43865`、专用 Chrome SOCKS `43866`、Claude Desktop HTTP `43867`。三条入口均应经 `ACCOUNT-US` 出口。

@@ -5,6 +5,8 @@ description: 在本项目维护 Claude Desktop App、Claude Code CLI 和 VS Code
 
 # Claude 更新与防护同步
 
+> 端口：文中 43865 / 43866 / 43867 是默认值，本机以部署清单为准，见 [docs README「部署清单」](../../../docs/配置/Claude环境/README.md#部署清单)。
+
 本文件是维护 SOP 的唯一正文；由本文件向上三级定位项目根目录，根目录缺少 `docs/配置/Claude环境/` 就停止。路径均相对项目根，脚本一律用 PowerShell 7。Docs 是活动源，Skill 里的脚本副本只做同步。
 
 ## 为什么比「直接更新」多几步

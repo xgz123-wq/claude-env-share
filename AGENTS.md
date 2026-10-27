@@ -30,8 +30,19 @@
 | 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/Anthropic网段直连阻断.md` |
 | 7 快捷方式 | 桌面建「Claude-环境一键总检」「Claude-英文浏览器」「Claude-三端更新」，目标为 PowerShell 7 加 `-File` 指向对应 docs 脚本；各账号 Chrome 快捷方式第 4 步已建 | `docs/配置/Claude环境/说明/日常使用.md`「桌面入口与维护」 |
 | 8 验收 | 一键总检 0 FAIL；`docs/配置/Claude环境/工具/检查脚本完整性.ps1` 0 FAIL；用户肉眼核对检测站；把结果写进 `维护日志.md` | `docs/配置/Claude环境/Claude环境一键总检.ps1` |
+| 9 部署清单 | 最后再跑一次一键总检（顺带生成清单）：它从 Clash 运行配置读出三个端口、登记桌面上的专用浏览器，写进 `%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json`；确认三个端口与 Clash 一致、每个专用浏览器都已登记。之后改端口只在 Clash 改，再跑一次总检 | `docs/配置/Claude环境/README.md`「部署清单」 |
 
 - **分享版的已知问题**：步骤 6 之前，`工具/检查脚本完整性.ps1` 的防护状态项报 WARN；步骤 7 之前，它的桌面图标项报 WARN；步骤 6 之前，总检的直连防护项报 FAIL；步骤 6a 之前，网段阻断项报 FAIL。都属预期，做完对应步骤后消失。
+
+## 推荐安装目录
+
+| 情况 | 位置 |
+|---|---|
+| 有 D 盘 | `D:\Tools\Claude环境\`：放环境卫士两个 exe 和本分享包（git clone） |
+| 没有 D 盘 | `%LOCALAPPDATA%\Programs\Claude环境\` |
+| 专用浏览器数据 | 不随安装目录走，固定在 `%LOCALAPPDATA%\ClaudeAccountBrowsers\` |
+
+- **分享包放哪都行**：一键总检会把自己的位置写进部署清单，环境卫士按清单找，不用放桌面；目录层级不能变（总检按「脚本目录往上 3 层 = 项目根」定位）。
 
 ## 维护工作流程（部署后）
 
@@ -51,6 +62,16 @@
 - **docs 是唯一来源**：脚本、配置和防护状态 json 只在 `docs/配置/Claude环境/`；Skill 只放说明，命令指回 docs，不要在 Skill 里放脚本副本。
 - **不导入别人的状态**：防护状态 json、指纹、GUID 必须在本机生成。
 - **会话代理**：若会话环境被注入 `HTTPS_PROXY=http://127.0.0.1:43867`，访问国内站点前用 `env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY` 去掉代理变量，不要为此改 Clash。
+
+## 部署清单的三条规矩
+
+端口和路径记在部署清单 `%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json`，说明见 `docs/配置/Claude环境/README.md`「部署清单」。
+
+| 规矩 | 意思 |
+|---|---|
+| 同一个值只存一处 | 端口、路径只在清单里有数字（源头是 Clash）；脚本用 `Get-DeployPort` 按名字取，环境卫士按名字读，不再写死 |
+| 写的和查的分开 | 分享包脚本写清单（一键总检刷新、建浏览器登记）、按清单抄写配置；环境卫士只读清单和对账，不改清单 |
+| 第三次出现就收进清单 | 新功能要用某个值时，如果已经有两处在用，先加进清单和 `读部署清单.ps1`，再用 |
 
 ## 文档规范
 

@@ -284,6 +284,9 @@
 <tr><td>其他应用</td><td>不设置</td><td>TUN 接管</td><td>按订阅规则走；访问 Claude 域名也会命中置顶规则</td></tr>
 </table></div>
 
+<div class="box tip rv"><span class="t">端口记在哪</span>
+<p>表里是默认端口。端口的源头在 Clash（混合端口在 Clash 设置里，两个专用口在全局脚本里）；一键总检每次从 Clash 读出来，写进 <code>%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json</code>，各脚本和环境卫士都按名字从这份清单取。改端口只在 Clash 改，再跑一次一键总检。</p></div>
+
 <div class="box tip rv"><span class="t">为什么 Chrome 和 Desktop 整口进组，Code 却按规则？</span>
 <p>Chrome 和 Desktop 的专用口<b>只给 Claude 用</b>，整口进组最省心、也不会漏；Code 用的是 Clash 公共的混合端口，它还要访问 npm、GitHub 等别的站点，所以按域名分流。</p></div>
 

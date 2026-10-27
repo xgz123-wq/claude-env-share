@@ -37,22 +37,19 @@
 
 ## SOP-3 改端口或改组名
 
-**不建议改。** 改之前先列出所有出现位置，逐个改、逐个验：
-
-```bash
-grep -rn "43865\|43866\|43867" docs/配置/Claude环境 --include=*.ps1 --include=*.js --include=*.md
-```
+**不建议改。** 2026-10-27 起脚本和环境卫士都按名字从[部署清单](../../../../docs/配置/Claude环境/README.md#部署清单)取端口，改端口不用再改脚本；源头在 Clash，只在 Clash 一侧改，其余由清单带过去：
 
 | 位置 | 内容 | 谁改 |
 |---|---|---|
-| `docs/配置/Claude环境/Clash/Clash全局账号通道.js` → 现场 `Script.js` | listener 端口、组名、规则目标、DNS policy 的 `#ACCOUNT-US` | 用户在 Clash 里更新全局脚本 |
-| `~\.claude\settings.json` | `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` | 用户 |
-| 各专用 Chrome 快捷方式 | `--proxy-server=socks5://127.0.0.1:43866` | 用户 |
+| Clash Verge「设置 → Clash 设置 → 端口设置」 | 混合端口（= 清单的 `通用`） | 用户 |
+| `docs/配置/Claude环境/Clash/Clash全局账号通道.js` → 现场 `Script.js` | 两个 listener 端口（= 清单的 `浏览器`、`Desktop`）、组名、规则目标、DNS policy 的 `#ACCOUNT-US` | 用户在 Clash 里更新全局脚本 |
+| 部署清单 `%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json` | 三个端口 | 不手改；跑一次一键总检自动从 Clash 刷新 |
+| `~\.claude\settings.json` | `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` | 用户（总检和卫士只核对） |
+| 各专用 Chrome 快捷方式 | `--proxy-server=socks5://127.0.0.1:<浏览器端口>` | 用户 |
 | `HKLM\SOFTWARE\Policies\Claude`、`configLibrary` profile | `egressProxyUrl` | 用户（管理员） |
-| docs 脚本里的字面量 | 上面 grep 列出的文件:行号 | 模型 |
-| 环境卫士 `设置.json` | 三个端口 | 用户在卫士设置页 |
+| 环境卫士 | 三个端口 | 不用改：v2.6.0 起读清单，设置页只读 |
 
-改完跑 SOP-5。若改了 Desktop 端口，还要确认英文启动器 `-CheckOnly` 通过。
+改组名仍要先 `grep -rn "ACCOUNT-US" docs/配置/Claude环境 --include=*.ps1 --include=*.js` 列出所有位置逐个改。改完先跑一次一键总检刷新清单，再跑 SOP-5；若改了 Desktop 端口，还要确认英文启动器 `-CheckOnly` 通过。
 
 ## SOP-4 回滚
 
