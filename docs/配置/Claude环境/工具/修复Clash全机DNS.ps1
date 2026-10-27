@@ -10,6 +10,8 @@ $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backupDir = Join-Path $base (Join-Path 'account-routing-backups' ($timestamp + '-阶段1-DNS'))
 $previewConfig = Join-Path $backupDir 'clash-verge-preview.yaml'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot '读部署清单.ps1')
+$portCli = Get-DeployPort 通用
 $desiredNameservers = @(
   '8.8.8.8',
   'https://doh.pub/dns-query',
@@ -155,7 +157,7 @@ try {
     throw ('运行状态读取失败: ' + $configResponse.Status)
   }
   $live = $configResponse.Body | ConvertFrom-Json
-  if ($live.mode -ne 'rule' -or -not $live.tun.enable -or $live.'mixed-port' -ne 43865) {
+  if ($live.mode -ne 'rule' -or -not $live.tun.enable -or $live.'mixed-port' -ne $portCli) {
     throw "运行状态不符合预期: mode=$($live.mode), tun=$($live.tun.enable), mixed-port=$($live.'mixed-port')"
   }
 

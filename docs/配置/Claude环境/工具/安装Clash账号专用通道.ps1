@@ -15,7 +15,9 @@ $previewConfig = Join-Path $backupDir 'clash-verge-preview.yaml'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $groupName = 'ACCOUNT-US'
 $listenerName = 'account-us-socks'
-$listenerPort = 43866
+# 浏览器专用端口按名字从部署清单取；本脚本把它写进 Clash全局账号通道.js，之后 JS 就是这个端口的定义处。
+. (Join-Path $PSScriptRoot '读部署清单.ps1')
+$listenerPort = Get-DeployPort 浏览器
 $inboundRule = "IN-NAME,$listenerName,$groupName"
 
 function ConvertFrom-ChunkedBody {

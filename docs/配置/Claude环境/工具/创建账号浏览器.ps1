@@ -21,8 +21,10 @@ $chromeCandidates = @(
 $chrome = $chromeCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
 if (-not $chrome) { throw '没有找到 Google Chrome。' }
 
-$listener = Get-NetTCPConnection -State Listen -LocalPort 43866 -ErrorAction SilentlyContinue
-if (-not $listener) { throw '专用 SOCKS 端口 43866 未监听。' }
+. (Join-Path $PSScriptRoot '读部署清单.ps1')
+$portBrowser = Get-DeployPort 浏览器
+$listener = Get-NetTCPConnection -State Listen -LocalPort $portBrowser -ErrorAction SilentlyContinue
+if (-not $listener) { throw "专用 SOCKS 端口 $portBrowser 未监听。" }
 
 $root = Join-Path $env:LOCALAPPDATA (Join-Path 'ClaudeAccountBrowsers' $Alias)
 $userData = Join-Path $root 'UserData'
@@ -40,7 +42,7 @@ if (Test-Path -LiteralPath $userData) {
 
 $arguments = @(
   "--user-data-dir=`"$userData`"",
-  '--proxy-server="socks5://127.0.0.1:43866"',
+  "--proxy-server=`"socks5://127.0.0.1:$portBrowser`"",
   '--host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost"',
   '--lang=en-US',
   '--accept-lang="en-US,en"',
@@ -58,9 +60,12 @@ $shortcut.Description = "Claude 独立账号浏览器：$Alias"
 $shortcut.Save()
 
 $verify = $shell.CreateShortcut($shortcutPath)
-if ($verify.Arguments -notlike '*--user-data-dir=*' -or $verify.Arguments -notlike '*127.0.0.1:43866*') {
+if ($verify.Arguments -notlike '*--user-data-dir=*' -or $verify.Arguments -notlike "*127.0.0.1:$portBrowser*") {
   throw '快捷方式创建后的参数校验失败。'
 }
+
+# 建好后登记进部署清单（整份按桌面快捷方式刷新）；登记失败不影响已建好的浏览器，跑一次一键总检会补上。
+$registered = try { [bool](& (Join-Path $PSScriptRoot '写部署清单.ps1')) } catch { $false }
 
 if ($Launch) {
   Start-Process -FilePath $chrome -ArgumentList $arguments
@@ -72,5 +77,6 @@ if ($Launch) {
   UserData = $userData
   Shortcut = $shortcutPath
   Launched = [bool]$Launch
+  Registered = $registered
   Notice = '未复制任何 Cookie、Login Data 或旧 Profile；首次使用需人工登录。'
 } | ConvertTo-Json -Depth 4

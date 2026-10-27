@@ -15,6 +15,8 @@ if (-not $pwshExe -or $pwshExe -notlike '*pwsh.exe') { $pwshExe = Join-Path $env
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backupDir = Join-Path $backupRoot ($timestamp + '-阶段4-通用Claude规则')
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot '读部署清单.ps1')
+$portBrowser = Get-DeployPort 浏览器
 
 foreach ($path in @($sourceScript, $installedScript, $runtimeConfig, $checkConfig, $clashApp, $validator)) {
   if (-not (Test-Path -LiteralPath $path)) { throw "缺少必需文件: $path" }
@@ -49,9 +51,9 @@ try {
   $deadline = (Get-Date).AddSeconds(50)
   do {
     Start-Sleep -Milliseconds 750
-    $listener = Get-NetTCPConnection -State Listen -LocalPort 43866 -ErrorAction SilentlyContinue
+    $listener = Get-NetTCPConnection -State Listen -LocalPort $portBrowser -ErrorAction SilentlyContinue
   } until ($listener -or (Get-Date) -ge $deadline)
-  if (-not $listener) { throw 'Clash 重启后 43866 未恢复。' }
+  if (-not $listener) { throw "Clash 重启后 $portBrowser 未恢复。" }
 
   $validationOutput = @(& $pwshExe -NoProfile -ExecutionPolicy Bypass -File $validator 2>&1)
   $validationExit = $LASTEXITCODE
