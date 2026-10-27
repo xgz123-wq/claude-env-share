@@ -11,6 +11,9 @@ param(
     [string]$ResultPath
 )
 $ErrorActionPreference = 'Stop'
+# Desktop 专用端口按名字从部署清单取（源头是 Clash全局账号通道.js 的 claude-desktop-http）。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+$desktopPort = Get-DeployPort Desktop
 $helper = Join-Path $PSScriptRoot '应用直连过滤.cs'
 $manager = Join-Path $PSScriptRoot '应用直连防护管理.ps1'
 $manifestPath = Join-Path $PSScriptRoot '应用过滤目标.json'
@@ -28,8 +31,8 @@ function Step([string]$Name, $Evidence) {
 function Assert-Environment {
     if (@(Get-Process -Name claude -ErrorAction SilentlyContinue).Count) { throw 'Claude 正在运行；请退出后重试。本脚本不会结束或启动应用。' }
     $policy = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Claude'
-    if ($policy.disableAutoUpdates -ne 1 -or $policy.egressProxyUrl -ne 'http://127.0.0.1:43867') {
-        throw '机器级禁更与 43867 专用代理策略必须同时存在且正确。'
+    if ($policy.disableAutoUpdates -ne 1 -or $policy.egressProxyUrl -ne "http://127.0.0.1:$desktopPort") {
+        throw "机器级禁更与 $desktopPort 专用代理策略必须同时存在且正确。"
     }
 }
 function Assert-Signature([string]$Path) {

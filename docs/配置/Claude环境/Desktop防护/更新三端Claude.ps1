@@ -10,7 +10,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Update','Check')][string]$Action = 'Update',
-    [string]$Proxy = 'http://127.0.0.1:43867',
+    # 查版本、下载走的代理；不传时按部署清单的 Desktop 专用端口。
+    [string]$Proxy,
     # 卫士指定本次记录目录：Update 用它代替 更新记录-<时间>；Check 把记录写成其中的 检查记录.json。
     [string]$RunDirectory,
     # UAC 内的日常总检只查这次更新动过的项（Desktop 策略与直连防护），Clash、出口、快捷方式不查。
@@ -21,6 +22,8 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $PSStyle.OutputRendering = 'PlainText'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+if (-not $Proxy) { $Proxy = "http://127.0.0.1:$(Get-DeployPort Desktop)" }
 
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $guardRoot = Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard'
@@ -91,7 +94,7 @@ function Get-DesktopLatest([string]$Arch) {
     # 固定来源：Anthropic Windows 部署说明给出的最新版跳转入口。HEAD 返回 405，只能用 GET 读 307 的 Location。
     $source = "https://claude.ai/api/desktop/win32/$Arch/msix/latest/redirect"
     $response = Invoke-WebRequest -Uri $source -Method Get -Proxy $Proxy -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 60 -ErrorAction SilentlyContinue
-    if (-not $response) { throw '官方入口无响应；检查 43867 通道。' }
+    if (-not $response) { throw "官方入口无响应；检查 $Proxy 通道。" }
     $location = [string]($response.Headers['Location'] | Select-Object -First 1)
     if ($response.StatusCode -notin 301,302,303,307,308 -or -not $location) { throw ('官方入口没有返回跳转，状态码：' + $response.StatusCode) }
     $uri = [Uri]::new([Uri]$source, $location)

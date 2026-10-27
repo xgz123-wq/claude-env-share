@@ -7,8 +7,10 @@ param(
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
-$expectedProxy = 'http://127.0.0.1:43867'
-$expectedPort = 43867
+# Desktop 专用端口按名字从部署清单取（源头是 Clash全局账号通道.js 的 claude-desktop-http）。
+. (Join-Path $PSScriptRoot '工具\读部署清单.ps1')
+$expectedPort = Get-DeployPort Desktop
+$expectedProxy = "http://127.0.0.1:$expectedPort"
 $guardDirectory = Join-Path $PSScriptRoot 'Desktop防护'
 $guardManifestPath = Join-Path $guardDirectory '应用过滤目标.json'
 $guardStatePath = Join-Path $guardDirectory '应用直连防护状态.json'
@@ -196,7 +198,7 @@ function Assert-ClashRoute {
         ($listenerBlock -match "(?m)^\s*port:\s*$expectedPort\s*`$") -and
         ($listenerBlock -match '(?m)^\s*proxy:\s*ACCOUNT-US\s*$')
     if (-not $listenerReady) {
-        throw 'Clash 的 43867 没有完整固定到 ACCOUNT-US。'
+        throw "Clash 的 $expectedPort 没有完整固定到 ACCOUNT-US。"
     }
 
     $groupMatches = [regex]::Matches($text, '(?ms)^- name:\s*ACCOUNT-US\s*$.*?(?=^- name:|\z)')
@@ -225,19 +227,19 @@ try {
     Write-Pass "固定代理：$($proxy.Source) -> $expectedProxy"
 
     Assert-ClashRoute
-    Write-Pass 'Clash 路由：43867 -> ACCOUNT-US，且排除 Direct/Reject'
+    Write-Pass "Clash 路由：$expectedPort -> ACCOUNT-US，且排除 Direct/Reject"
 
     $listeners = @(Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort $expectedPort -ErrorAction SilentlyContinue)
     if (-not $listeners.Count) {
-        throw 'Claude 专用代理 43867 未开启，已拒绝启动 Claude。'
+        throw "Claude 专用代理 $expectedPort 未开启，已拒绝启动 Claude。"
     }
     $ownerNames = @($listeners.OwningProcess | Select-Object -Unique | ForEach-Object {
         (Get-Process -Id $_ -ErrorAction Stop).ProcessName
     } | Select-Object -Unique)
     if ($ownerNames.Count -ne 1 -or $ownerNames[0] -ne 'verge-mihomo') {
-        throw ('43867 不是由 Clash 内核 verge-mihomo 提供，已拒绝启动 Claude。当前：' + ($ownerNames -join ', '))
+        throw ("$expectedPort 不是由 Clash 内核 verge-mihomo 提供，已拒绝启动 Claude。当前：" + ($ownerNames -join ', '))
     }
-    Write-Pass '43867 正在监听，且归属 verge-mihomo'
+    Write-Pass "$expectedPort 正在监听，且归属 verge-mihomo"
 
     $guardEvidence = Assert-GuardEvidence -PackageVersion $package.Version.ToString()
     Write-Pass "Windows 直连防护记录有效：$guardEvidence；Claude Desktop $($package.Version) 与规则匹配"
@@ -248,9 +250,9 @@ try {
     $proxyOutput = (& curl.exe -sS --max-time 10 --proxy $expectedProxy https://api.ipify.org 2>$null | Out-String).Trim()
     $parsedIp = $null
     if ($LASTEXITCODE -ne 0 -or -not [Net.IPAddress]::TryParse($proxyOutput, [ref]$parsedIp)) {
-        throw '43867 虽已监听，但无法通过它取得有效公网出口，已拒绝启动 Claude。'
+        throw "$expectedPort 虽已监听，但无法通过它取得有效公网出口，已拒绝启动 Claude。"
     }
-    Write-Pass "43867 代理连通，出口：$proxyOutput"
+    Write-Pass "$expectedPort 代理连通，出口：$proxyOutput"
 
     if ($CheckOnly) {
         Write-Host '结论：启动前检查全部通过；本次只检查，没有启动 Claude。' -ForegroundColor Cyan

@@ -12,7 +12,9 @@ $userPolicyPath = 'HKCU:\SOFTWARE\Policies\Claude'
 $machinePolicyPath = 'HKLM:\SOFTWARE\Policies\Claude'
 $valueName = 'disableAutoUpdates'
 $proxyValueName = 'egressProxyUrl'
-$expectedProxy = 'http://127.0.0.1:43867'
+# Desktop 专用端口按名字从部署清单取（源头是 Clash全局账号通道.js 的 claude-desktop-http）。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+$expectedProxy = "http://127.0.0.1:$(Get-DeployPort Desktop)"
 $targetPolicyPath = if ($Scope -eq 'Machine') { $machinePolicyPath } else { $userPolicyPath }
 
 $isAdministrator = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(

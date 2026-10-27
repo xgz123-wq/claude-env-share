@@ -17,6 +17,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $PSStyle.OutputRendering = 'PlainText'
+# Desktop 专用端口按名字从部署清单取（源头是 Clash全局账号通道.js 的 claude-desktop-http）；UAC 内同一账户，读的是同一份清单。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+$desktopPort = Get-DeployPort Desktop
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $result = [ordered]@{At=(Get-Date -Format o);Action=$Action;Status='running';Version=$null;HashCount=0;FiltersCount=0;Disabled=$null;Proxy=$null;UACWorker=[bool]$Worker;ApplicationsLaunched=$false;Logs=@();StepSeconds=[ordered]@{};Checks=$null;Error=$null}
@@ -126,7 +129,7 @@ try {
     $policy = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Claude'
     $result.Disabled = ($policy.disableAutoUpdates -eq 1)
     $result.Proxy = [string]$policy.egressProxyUrl
-    if (-not $result.Disabled -or $result.Proxy -ne 'http://127.0.0.1:43867') { throw '禁更策略或 43867 专用代理策略不符。' }
+    if (-not $result.Disabled -or $result.Proxy -ne "http://127.0.0.1:$desktopPort") { throw "禁更策略或 $desktopPort 专用代理策略不符。" }
     foreach ($ifeo in @('HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\claude.exe','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\claude.exe')) {
         if (Test-Path -LiteralPath $ifeo) {
             foreach ($key in @((Get-Item -LiteralPath $ifeo)) + @(Get-ChildItem -LiteralPath $ifeo -Recurse)) {

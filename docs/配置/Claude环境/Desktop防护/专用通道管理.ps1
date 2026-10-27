@@ -14,7 +14,10 @@ $core = 'C:\Program Files\Clash Verge\verge-mihomo.exe'
 $policy = 'HKCU:\SOFTWARE\Policies\Claude'
 $library = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
 $metaPath = Join-Path $library '_meta.json'
-$proxyUrl = 'http://127.0.0.1:43867'
+# Desktop 专用端口按名字从部署清单取；Install 会把它写进 Clash全局账号通道.js（之后 JS 就是这个端口的定义处）。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+$desktopPort = Get-DeployPort Desktop
+$proxyUrl = "http://127.0.0.1:$desktopPort"
 $statePath = Join-Path $PSScriptRoot '安装状态.json'
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 
@@ -69,12 +72,12 @@ function Write-JsonFile([string] $Path, $Value) {
 function New-Preview([string] $InputPath, [string] $OutputPath, [string] $Mode, [string] $Target = 'ACCOUNT-US') {
   @'
 import json, sys, yaml
-src, dst, mode, target = sys.argv[1:]
+src, dst, mode, target, port = sys.argv[1:]
 with open(src, encoding='utf-8-sig') as f:
     original = yaml.safe_load(f)
 import copy
 c = copy.deepcopy(original)
-entry = {'name':'claude-desktop-http','type':'http','listen':'127.0.0.1','port':43867,'proxy':target,'users':[]}
+entry = {'name':'claude-desktop-http','type':'http','listen':'127.0.0.1','port':int(port),'proxy':target,'users':[]}
 c['listeners'] = [entry] + [v for v in c.get('listeners',[]) if v.get('name') != entry['name']]
 c['mode'] = mode
 assert c.get('dns') == original.get('dns'), 'Unexpected DNS change'
@@ -84,7 +87,7 @@ assert c.get('proxy-groups') == original.get('proxy-groups'), 'Unexpected group 
 with open(dst,'w',encoding='utf-8',newline='\n') as f:
     yaml.safe_dump(c,f,allow_unicode=True,sort_keys=False)
 print(json.dumps({'configGenerated':True,'dnsUnchanged':True,'existingRoutingUnchanged':True}))
-'@ | & python - $InputPath $OutputPath $Mode $Target
+'@ | & python - $InputPath $OutputPath $Mode $Target $desktopPort
   if ($LASTEXITCODE -ne 0) { throw '生成候选配置失败。' }
 }
 
@@ -120,7 +123,7 @@ function Test-Endpoint([string] $Url) {
 function Test-Route {
   $client = [Net.Sockets.TcpClient]::new()
   try {
-    if (-not $client.ConnectAsync('127.0.0.1', 43867).Wait(8000)) { throw '专用入口连接超时。' }
+    if (-not $client.ConnectAsync('127.0.0.1', $desktopPort).Wait(8000)) { throw '专用入口连接超时。' }
     $stream = $client.GetStream()
     $stream.ReadTimeout = 8000
     $request = $utf8.GetBytes("CONNECT example.com:443 HTTP/1.1`r`nHost: example.com:443`r`n`r`n")
@@ -151,7 +154,7 @@ if ($Action -eq 'Install') {
   }
   if (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Policies\Claude') { throw '发现机器级 Claude 策略，需先评估优先级。' }
   if (Test-Path -LiteralPath $policy) { throw '发现用户级 Claude 托管策略，需先评估本地配置优先级。' }
-  if (Get-NetTCPConnection -State Listen -LocalPort 43867 -ErrorAction SilentlyContinue) { throw '43867 已被占用。' }
+  if (Get-NetTCPConnection -State Listen -LocalPort $desktopPort -ErrorAction SilentlyContinue) { throw "$desktopPort 已被占用。" }
   if ((Get-FileHash $sourceScript).Hash -ne (Get-FileHash $liveScript).Hash) { throw '工作区源文件与运行脚本不一致，停止覆盖。' }
   $oldMeta = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json
   if ($oldMeta.appliedId -or $oldMeta.hybridPointer -or @($oldMeta.entries).Count -gt 0) { throw '已有本地配置，需要合并评估，不能覆盖。' }
@@ -193,12 +196,13 @@ if ($Action -eq 'Install') {
     name: "claude-desktop-http",
     type: "http",
     listen: "127.0.0.1",
-    port: 43867,
+    port: __DESKTOP_PORT__,
     proxy: groupName,
     users: []
   });
 
 '@
+  $addition = $addition.Replace('__DESKTOP_PORT__', [string]$desktopPort)
   $newScript = $original.Replace($needle, $addition + "`n" + $needle)
   $candidateScript = Join-Path $backup '候选脚本.js'
   [IO.File]::WriteAllText($candidateScript, $newScript, $utf8)
@@ -241,7 +245,7 @@ if ($Action -eq 'Install') {
 if ($Action -eq 'Verify') {
   $snapshot = Read-Snapshot
   $corePid = @(Get-Process -Name verge-mihomo -ErrorAction SilentlyContinue).Id
-  $listener = @(Get-NetTCPConnection -State Listen -LocalPort 43867 -ErrorAction SilentlyContinue)
+  $listener = @(Get-NetTCPConnection -State Listen -LocalPort $desktopPort -ErrorAction SilentlyContinue)
   $meta = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json
   if ($meta.appliedId -notmatch '^[a-f0-9-]{36}$') { throw '本地配置 appliedId 无效。' }
   $profile = Get-Content -LiteralPath (Join-Path $library ($meta.appliedId + '.json')) -Raw | ConvertFrom-Json
