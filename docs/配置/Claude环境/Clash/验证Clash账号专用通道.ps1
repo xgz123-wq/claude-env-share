@@ -1,5 +1,10 @@
 $ErrorActionPreference = 'Stop'
 
+# 端口按名字从部署清单取（通用 = Clash 混合端口，浏览器 = 专用 Chrome 的 SOCKS）；检查项名字里的 43865 / 43866 是固定字段名，不随端口变。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+$portCli = Get-DeployPort 通用
+$portBrowser = Get-DeployPort 浏览器
+
 $base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $runtime = Join-Path $base 'clash-verge.yaml'
 $core = 'C:\Program Files\Clash Verge\verge-mihomo.exe'
@@ -88,19 +93,19 @@ foreach ($path in @($runtime, $core)) {
 }
 
 $text = Get-Content -LiteralPath $runtime -Raw
-$listener65 = @(Get-NetTCPConnection -State Listen -LocalPort 43865 -ErrorAction SilentlyContinue)
-$listener66 = @(Get-NetTCPConnection -State Listen -LocalPort 43866 -ErrorAction SilentlyContinue)
+$listener65 = @(Get-NetTCPConnection -State Listen -LocalPort $portCli -ErrorAction SilentlyContinue)
+$listener66 = @(Get-NetTCPConnection -State Listen -LocalPort $portBrowser -ErrorAction SilentlyContinue)
 $accountResponse = Invoke-MihomoPipe GET '/proxies/ACCOUNT-US'
 $configResponse = Invoke-MihomoPipe GET '/configs'
 $account = if ($accountResponse.Status -match ' 200 ') { $accountResponse.Body | ConvertFrom-Json } else { $null }
 $live = if ($configResponse.Status -match ' 200 ') { $configResponse.Body | ConvertFrom-Json } else { $null }
 $validation = @(& $core -t -d $base -f $runtime 2>&1)
 $validationExit = $LASTEXITCODE
-$socksIp = curl.exe --silent --show-error --max-time 20 --socks5-hostname 127.0.0.1:43866 https://api.ipify.org
+$socksIp = curl.exe --silent --show-error --max-time 20 --socks5-hostname 127.0.0.1:$portBrowser https://api.ipify.org
 $socksExit = $LASTEXITCODE
 # TUN 空闲后第一个 SOCKS 连接握手偏慢，单次 20 秒超时会产生假失败，故重试一次。
 for ($attempt = 1; $attempt -le 2; $attempt++) {
-  $claudeStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --socks5-hostname 127.0.0.1:43866 https://claude.ai/
+  $claudeStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --socks5-hostname 127.0.0.1:$portBrowser https://claude.ai/
   $claudeExit = $LASTEXITCODE
   if ($claudeExit -eq 0 -and $claudeStatus -ne '000') { break }
   if ($attempt -eq 1) { Start-Sleep -Seconds 3 }

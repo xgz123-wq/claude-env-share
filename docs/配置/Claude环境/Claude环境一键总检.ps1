@@ -23,7 +23,23 @@ $guardInstall = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\�
 $rangeCheck = Join-Path $PSScriptRoot 'Anthropic网段直连阻断.ps1'
 $desktopConfigRoot = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
 $desktopMeta = Join-Path $desktopConfigRoot '_meta.json'
-$expectedDesktopProxy = 'http://127.0.0.1:43867'
+$manifestWriter = Join-Path $PSScriptRoot '工具\写部署清单.ps1'
+
+# 部署清单：先按 Clash 运行配置和桌面快捷方式刷新一次（内容没变不写），再按名字取端口；-Scope Guard 在 UAC 里跑，只读不刷新。
+$manifestNote = $null
+if ($Scope -eq 'All') {
+  try {
+    $manifestRefresh = & $manifestWriter
+    if ($manifestRefresh.Changed) { $manifestNote = "部署清单已按 $($manifestRefresh.Source) 刷新：$($manifestRefresh.Ports)；专用浏览器 $($manifestRefresh.Browsers)" }
+  } catch {
+    $manifestNote = '部署清单刷新失败，本次按原清单或默认端口检查：' + $_.Exception.Message
+  }
+}
+. (Join-Path $PSScriptRoot '工具\读部署清单.ps1')
+$portCli = Get-DeployPort 通用
+$portBrowser = Get-DeployPort 浏览器
+$portDesktop = Get-DeployPort Desktop
+$expectedDesktopProxy = "http://127.0.0.1:$portDesktop"
 $machineClaudePolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Claude' -ErrorAction SilentlyContinue
 $userClaudePolicy = Get-ItemProperty -Path 'HKCU:\SOFTWARE\Policies\Claude' -ErrorAction SilentlyContinue
 
@@ -52,14 +68,6 @@ function Test-ProxyExit {
   $arguments += 'https://api.ipify.org'
   $body = (& curl.exe @arguments 2>$null | Out-String).Trim()
   [pscustomobject]@{Succeeded=($LASTEXITCODE -eq 0 -and $body -match '^\d{1,3}(\.\d{1,3}){3}$');IP=$body}
-}
-
-function Read-Shortcut {
-  param([string] $Path)
-  if (-not (Test-Path -LiteralPath $Path)) { return $null }
-  $shell = New-Object -ComObject WScript.Shell
-  $shortcut = $shell.CreateShortcut($Path)
-  [pscustomobject]@{Path=$Path;Target=$shortcut.TargetPath;Arguments=[string]$shortcut.Arguments}
 }
 
 function Test-GuardRecord {
@@ -101,8 +109,9 @@ function Test-GuardBinary($Target) {
 Write-Host ''
 Write-Host 'Claude / Clash 环境一键总检' -ForegroundColor Cyan
 Write-Host ('检查时间：{0}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'))
-Write-Host '本工具只读检查；不会启动 Claude Code 或 Claude Desktop。' -ForegroundColor DarkGray
+Write-Host '本工具只做检查（顺带按 Clash 刷新部署清单）；不改 Clash、不启动 Claude Code 或 Claude Desktop。' -ForegroundColor DarkGray
 if ($Scope -eq 'Guard') { Write-Host '范围：只查 Desktop 策略与直连防护（更新后由一键更新调用）；Clash、出口、快捷方式、网段阻断这次不查。' -ForegroundColor DarkGray }
+if ($manifestNote) { Write-Host $manifestNote -ForegroundColor DarkGray }
 
 # Clash 规则、DNS、三个出口、专用浏览器快捷方式和更新无关，-Scope Guard 时不查。
 if ($Scope -eq 'All') {
@@ -119,7 +128,7 @@ if ($Scope -eq 'All') {
         $baseCount = @($baseResult.Checks.PSObject.Properties).Count
         Add-Result PASS 'Rule / TUN / Claude 规则' "基础验证 $baseCount/$baseCount；Clash 配置语法通过"
         Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
-        Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；43866 出口：$($baseResult.SocksPublicIp)"
+        Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；$portBrowser 出口：$($baseResult.SocksPublicIp)"
       } else {
         Add-Result FAIL 'Rule / TUN / Claude 规则' ('失败项：' + ($baseResult.FailedChecks -join ', '))
       }
@@ -143,13 +152,13 @@ if ($Scope -eq 'All') {
     Add-Result FAIL 'Clash 运行配置' "缺少文件：$runtime"
   }
 
-  $exit65 = Test-ProxyExit http 43865
-  $exit66 = Test-ProxyExit socks5h 43866
-  $exit67 = Test-ProxyExit http 43867
+  $exit65 = Test-ProxyExit http $portCli
+  $exit66 = Test-ProxyExit socks5h $portBrowser
+  $exit67 = Test-ProxyExit http $portDesktop
   foreach ($entry in @(
-    @{Name='Claude Code 43865';Value=$exit65},
-    @{Name='Claude Chrome 43866';Value=$exit66},
-    @{Name='Claude Desktop 43867';Value=$exit67}
+    @{Name="Claude Code $portCli";Value=$exit65},
+    @{Name="Claude Chrome $portBrowser";Value=$exit66},
+    @{Name="Claude Desktop $portDesktop";Value=$exit67}
   )) {
     if ($entry.Value.Succeeded) {
       Add-Result PASS $entry.Name ("出口：{0}" -f $entry.Value.IP)
@@ -161,33 +170,31 @@ if ($Scope -eq 'All') {
   if ($exitIps.Count -eq 3 -and @($exitIps | Select-Object -Unique).Count -eq 1) {
     Add-Result PASS 'Claude 三入口一致性' "三个入口均为 $($exitIps[0])"
   } else {
-    Add-Result FAIL 'Claude 三入口一致性' ('43865/43866/43867：' + ($exitIps -join ' / '))
+    Add-Result FAIL 'Claude 三入口一致性' ("$portCli/$portBrowser/$portDesktop：" + ($exitIps -join ' / '))
   }
 
-  # 桌面上 --user-data-dir 指向 ClaudeAccountBrowsers 的 Chrome 快捷方式都算专用浏览器，账号名从目录里取，不在脚本里写死。
-  $browserRoot = Join-Path $env:LOCALAPPDATA 'ClaudeAccountBrowsers'
-  $browserShortcuts = @(Get-ChildItem -LiteralPath $desktop -Filter '*.lnk' -File | ForEach-Object { Read-Shortcut $_.FullName } |
-    Where-Object { $_.Arguments.Contains($browserRoot + '\') } | ForEach-Object Path)
+  # 专用浏览器按 读部署清单.ps1 里的同一条规则认（桌面上 --user-data-dir 指向 ClaudeAccountBrowsers 的快捷方式），账号名从目录里取，不在脚本里写死。
+  $browserEntries = @(Get-DeployBrowserShortcuts)
+  $browserShortcuts = @($browserEntries | ForEach-Object Path)
   $dailyBrowserPath = Join-Path $desktop $DailyBrowser
   if ($dailyBrowserPath -notin $browserShortcuts) {
     Add-Result WARN $DailyBrowser '日常专用浏览器快捷方式不存在或没有指向 ClaudeAccountBrowsers'
   }
   $readyBrowser = $null
-  foreach ($shortcutPath in $browserShortcuts) {
-    $shortcut = Read-Shortcut $shortcutPath
+  foreach ($shortcut in $browserEntries) {
+    $shortcutPath = $shortcut.Path
     $arguments = $shortcut.Arguments
-    $alias = if ($arguments -match [regex]::Escape($browserRoot + '\') + '([^\\"]+)\\UserData') { $Matches[1] } else { '' }
-    $expectedUserData = Join-Path $browserRoot (Join-Path $alias 'UserData')
+    $expectedUserData = $shortcut.UserData
     $ready =
       ($shortcut.Target -like '*\chrome.exe') -and
-      (Test-Path -LiteralPath $expectedUserData) -and
+      [bool]$expectedUserData -and (Test-Path -LiteralPath $expectedUserData) -and
       ($arguments.Contains('--user-data-dir="' + $expectedUserData + '"')) -and
-      ($arguments.Contains('--proxy-server="socks5://127.0.0.1:43866"')) -and
+      ($arguments.Contains("--proxy-server=`"socks5://127.0.0.1:$portBrowser`"")) -and
       ($arguments -like '*--host-resolver-rules=*') -and
       ($arguments -like '*--lang=en-US*') -and
       ($arguments -like '*disable_non_proxied_udp*')
     if ($ready) {
-      Add-Result PASS ([IO.Path]::GetFileName($shortcutPath)) '独立 User Data、43866、远端 DNS、en-US、WebRTC 防旁路参数齐全'
+      Add-Result PASS ([IO.Path]::GetFileName($shortcutPath)) "独立 User Data、$portBrowser、远端 DNS、en-US、WebRTC 防旁路参数齐全"
       if ($shortcutPath -eq $dailyBrowserPath) { $readyBrowser = $shortcutPath }
     } else {
       Add-Result FAIL ([IO.Path]::GetFileName($shortcutPath)) '专用浏览器参数不完整'
@@ -204,18 +211,18 @@ if (Test-Path -LiteralPath $desktopMeta) {
       if ($machineClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
         Add-Result PASS 'Claude Desktop 本地代理' "HKLM egressProxyUrl=$expectedDesktopProxy"
       } else {
-        Add-Result FAIL 'Claude Desktop 本地代理' 'HKLM 设置了应用行为策略，但同层缺少 43867；本地配置会被忽略'
+        Add-Result FAIL 'Claude Desktop 本地代理' "HKLM 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
       }
     } elseif ($null -ne $userClaudePolicy.disableAutoUpdates) {
       if ($userClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
         Add-Result PASS 'Claude Desktop 本地代理' "HKCU egressProxyUrl=$expectedDesktopProxy"
       } else {
-        Add-Result FAIL 'Claude Desktop 本地代理' 'HKCU 设置了应用行为策略，但同层缺少 43867；本地配置会被忽略'
+        Add-Result FAIL 'Claude Desktop 本地代理' "HKCU 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
       }
     } elseif ($profile.egressProxyUrl -eq $expectedDesktopProxy) {
       Add-Result PASS 'Claude Desktop 本地代理' "本地 egressProxyUrl=$expectedDesktopProxy"
     } else {
-      Add-Result FAIL 'Claude Desktop 本地代理' '当前应用配置没有指向 43867'
+      Add-Result FAIL 'Claude Desktop 本地代理' "当前应用配置没有指向 $portDesktop"
     }
   } catch {
     Add-Result FAIL 'Claude Desktop 本地代理' '无法读取当前应用配置'
@@ -228,16 +235,16 @@ $machineUpdatePolicy = $machineClaudePolicy.disableAutoUpdates
 $userUpdatePolicy = $userClaudePolicy.disableAutoUpdates
 if ($null -ne $machineUpdatePolicy) {
   if ([int]$machineUpdatePolicy -eq 1 -and $machineClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
-    Add-Result PASS 'Claude Desktop 自动更新' 'HKLM 已禁更，并在同层保留 43867 代理'
+    Add-Result PASS 'Claude Desktop 自动更新' "HKLM 已禁更，并在同层保留 $portDesktop 代理"
   } elseif ([int]$machineUpdatePolicy -eq 1) {
-    Add-Result FAIL 'Claude Desktop 自动更新' 'HKLM 已禁更，但同层缺少 43867 代理，会导致网络被直连防护拒绝'
+    Add-Result FAIL 'Claude Desktop 自动更新' "HKLM 已禁更，但同层缺少 $portDesktop 代理，会导致网络被直连防护拒绝"
   } else {
     Add-Result WARN 'Claude Desktop 自动更新' 'HKLM 策略允许自动更新，并覆盖当前用户设置'
   }
 } elseif ([int]$userUpdatePolicy -eq 1 -and $userClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
-  Add-Result PASS 'Claude Desktop 自动更新' 'HKCU 已禁更，并在同层保留 43867 代理'
+  Add-Result PASS 'Claude Desktop 自动更新' "HKCU 已禁更，并在同层保留 $portDesktop 代理"
 } elseif ([int]$userUpdatePolicy -eq 1) {
-  Add-Result FAIL 'Claude Desktop 自动更新' 'HKCU 已禁更，但同层缺少 43867 代理，会导致网络被直连防护拒绝'
+  Add-Result FAIL 'Claude Desktop 自动更新' "HKCU 已禁更，但同层缺少 $portDesktop 代理，会导致网络被直连防护拒绝"
 } else {
   Add-Result WARN 'Claude Desktop 自动更新' '未禁用；Claude Desktop 默认约每 4 小时检查更新'
 }
