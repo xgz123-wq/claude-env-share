@@ -17,6 +17,8 @@ $groupName = 'ACCOUNT-US'
 $listenerName = 'account-us-socks'
 # 浏览器专用端口按名字从部署清单取；本脚本把它写进 Clash全局账号通道.js，之后 JS 就是这个端口的定义处。
 . (Join-Path $PSScriptRoot '读部署清单.ps1')
+# Clash 内核接口的管道名新版 Verge 带后缀、会变，统一从公共文件取。
+. (Join-Path $PSScriptRoot 'Clash内核管道.ps1')
 $listenerPort = Get-DeployPort 浏览器
 $inboundRule = "IN-NAME,$listenerName,$groupName"
 
@@ -45,7 +47,7 @@ function Invoke-MihomoPipe {
     [string] $Body = ''
   )
 
-  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', 'verge-mihomo', [System.IO.Pipes.PipeDirection]::InOut)
+  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', (Get-ClashPipeName), [System.IO.Pipes.PipeDirection]::InOut)
   try {
     $pipe.Connect(3000)
     $bodyBytes = $utf8NoBom.GetBytes($Body)

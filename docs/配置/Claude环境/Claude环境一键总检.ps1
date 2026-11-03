@@ -123,14 +123,20 @@ if ($Scope -eq 'All') {
     $raw = $output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Out-String
     $stderrLine = $output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Select-Object -First 1
     try {
-      $baseResult = $raw | ConvertFrom-Json
-      if ($baseResult.Success) {
+      # 验证脚本中途抛异常、没有输出时，ConvertFrom-Json 拿到空串会返回空结果而不报错；不能当成通过，也不能给空的失败项列表。
+      $baseResult = if ($raw.Trim()) { $raw | ConvertFrom-Json } else { $null }
+      if (-not $baseResult) {
+        $reason = if ($stderrLine) { 'stderr：' + [string]$stderrLine } else { '没有任何输出' }
+        Add-Result FAIL '基础验证程序' ('没有拿到验证结果；' + $reason)
+      } elseif ($baseResult.Success) {
         $baseCount = @($baseResult.Checks.PSObject.Properties).Count
         Add-Result PASS 'Rule / TUN / Claude 规则' "基础验证 $baseCount/$baseCount；Clash 配置语法通过"
         Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
         Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；$portBrowser 出口：$($baseResult.SocksPublicIp)"
       } else {
-        Add-Result FAIL 'Rule / TUN / Claude 规则' ('失败项：' + ($baseResult.FailedChecks -join ', '))
+        $detail = if (@($baseResult.FailedChecks).Count) { '失败项：' + ($baseResult.FailedChecks -join ', ') } else { '验证未通过但未给出失败项' }
+        if ($baseResult.MihomoApiError) { $detail += "；内核接口：$($baseResult.MihomoApiError)" }
+        Add-Result FAIL 'Rule / TUN / Claude 规则' $detail
       }
     } catch {
       Add-Result FAIL '基础验证程序' ('输出不是有效 JSON' + $(if ($stderrLine) { "；stderr：$stderrLine" } else { '' }))

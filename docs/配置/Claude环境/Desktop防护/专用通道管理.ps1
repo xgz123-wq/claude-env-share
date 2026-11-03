@@ -16,6 +16,8 @@ $library = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
 $metaPath = Join-Path $library '_meta.json'
 # Desktop 专用端口按名字从部署清单取；Install 会把它写进 Clash全局账号通道.js（之后 JS 就是这个端口的定义处）。
 . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+# Clash 内核接口的管道名新版 Verge 带后缀、会变，统一从公共文件取。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\Clash内核管道.ps1')
 $desktopPort = Get-DeployPort Desktop
 $proxyUrl = "http://127.0.0.1:$desktopPort"
 $statePath = Join-Path $PSScriptRoot '安装状态.json'
@@ -28,7 +30,7 @@ function Assert-ClaudeClosed {
 }
 
 function Invoke-Core([string] $Method, [string] $Path, $Payload = $null) {
-  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', 'verge-mihomo', [System.IO.Pipes.PipeDirection]::InOut)
+  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', (Get-ClashPipeName), [System.IO.Pipes.PipeDirection]::InOut)
   try {
     $pipe.Connect(3000)
     $body = if ($null -eq $Payload) { '' } else { $Payload | ConvertTo-Json -Depth 20 -Compress }

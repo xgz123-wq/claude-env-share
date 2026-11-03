@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 # 端口按名字从部署清单取（通用 = Clash 混合端口，浏览器 = 专用 Chrome 的 SOCKS）；检查项名字里的 43865 / 43866 是固定字段名，不随端口变。
 . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
+# Clash 内核接口的管道名新版 Verge 带后缀、会变，统一从公共文件取。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\Clash内核管道.ps1')
 $portCli = Get-DeployPort 通用
 $portBrowser = Get-DeployPort 浏览器
 
@@ -72,8 +74,9 @@ function ConvertFrom-ChunkedBody {
 
 function Invoke-MihomoPipe {
   param([string] $Method, [string] $Path)
-  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', 'verge-mihomo', [System.IO.Pipes.PipeDirection]::InOut)
+  $pipe = $null
   try {
+    $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', (Get-ClashPipeName), [System.IO.Pipes.PipeDirection]::InOut)
     $pipe.Connect(3000)
     $request = "$Method $Path HTTP/1.1`r`nHost: localhost`r`nConnection: close`r`nContent-Length: 0`r`n`r`n"
     $bytes = $utf8NoBom.GetBytes($request)
@@ -84,8 +87,11 @@ function Invoke-MihomoPipe {
     $parts = $response -split "`r?`n`r?`n", 2
     $body = if ($parts.Count -gt 1) { $parts[1] } else { '' }
     if ($parts[0] -match '(?im)^Transfer-Encoding:\s*chunked\s*$') { $body = ConvertFrom-ChunkedBody $body }
-    [pscustomobject]@{ Status = ($parts[0] -split "`r?`n")[0]; Body = $body }
-  } finally { $pipe.Dispose() }
+    [pscustomobject]@{ Status = ($parts[0] -split "`r?`n")[0]; Body = $body; Error = $null }
+  } catch {
+    # 不抛出去：连不上内核时也要照样输出 JSON，让总检显示具体原因，而不是给一个空的失败项列表。
+    [pscustomobject]@{ Status = 'ERROR'; Body = ''; Error = $_.Exception.Message }
+  } finally { if ($pipe) { $pipe.Dispose() } }
 }
 
 foreach ($path in @($runtime, $core)) {
@@ -139,6 +145,7 @@ $foreignDnsBindingGroups = @([regex]::Matches($text, '#([\w\-\.]+)&disable-ipv6'
   ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'ACCOUNT-US' } | Select-Object -Unique)
 
 $checks = [ordered]@{
+  MihomoApiReachable = ($configResponse.Status -match ' 200 ')
   ModeIsRule = ($live.mode -eq 'rule')
   TunEnabled = [bool]$live.tun.enable
   SystemProxyDisabled = ($proxyEnabled -eq 0)
@@ -174,6 +181,8 @@ $result = [pscustomobject]@{
   FeishuHttpStatus = $feishuStatus
   CorePid = @($listener66.OwningProcess | Select-Object -Unique)
   Validation = $validation[-1]
+  MihomoPipe = $script:clashPipeNameCache
+  MihomoApiError = if ($configResponse.Error) { $configResponse.Error } elseif ($accountResponse.Error) { $accountResponse.Error } else { '' }
 }
 $result | ConvertTo-Json -Depth 6
 if ($failed.Count -gt 0) { exit 1 }

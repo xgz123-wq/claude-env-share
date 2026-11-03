@@ -9,6 +9,8 @@ $base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $backupRoot = Join-Path $base 'account-routing-backups'
 $core = 'C:\Program Files\Clash Verge\verge-mihomo.exe'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+# Clash 内核接口的管道名新版 Verge 带后缀、会变，统一从公共文件取。
+. (Join-Path $PSScriptRoot 'Clash内核管道.ps1')
 
 function ConvertFrom-ChunkedBody {
   param([string] $Body)
@@ -28,7 +30,7 @@ function ConvertFrom-ChunkedBody {
 
 function Invoke-MihomoReload {
   param([string] $ConfigPath)
-  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', 'verge-mihomo', [System.IO.Pipes.PipeDirection]::InOut)
+  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', (Get-ClashPipeName), [System.IO.Pipes.PipeDirection]::InOut)
   try {
     $pipe.Connect(3000)
     $body = @{ path = $ConfigPath; payload = '' } | ConvertTo-Json -Compress

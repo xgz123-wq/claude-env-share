@@ -75,6 +75,7 @@ $required = @(
   '部署清单.示例.json'
   '工具\读部署清单.ps1'
   '工具\写部署清单.ps1'
+  '工具\Clash内核管道.ps1'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $envRoot $_)) })
 if ($missing) { foreach ($m in $missing) { Add-Result FAIL '必需文件' "缺少 $m" } }

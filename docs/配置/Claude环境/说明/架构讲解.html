@@ -594,7 +594,7 @@
 </ol>
 
 <h3 class="rv">2.5 改完必须重新加载并核验</h3>
-<p class="rv">本方案不依赖 mihomo 的 <code>9097</code> HTTP 控制端口；项目脚本可以通过 <code>\\.\pipe\verge-mihomo</code> 命名管道执行受控热重载。手动改配置后由用户在 Clash Verge 中应用或重载，再运行验证脚本读取运行态；模型默认不代用户重启或热重载 Clash。</p>
+<p class="rv">本方案不依赖 mihomo 的 <code>9097</code> HTTP 控制端口；项目脚本可以通过 Clash 内核的命名管道执行受控热重载（新版 Verge 管道名带后缀，由 <code>工具\Clash内核管道.ps1</code> 试连确认）。手动改配置后由用户在 Clash Verge 中应用或重载，再运行验证脚本读取运行态；模型默认不代用户重启或热重载 Clash。</p>
 
 <h3 class="rv">2.6 关于通用国外服务的规则</h3>
 <div class="box tip rv"><span class="t">一个简单的判断法</span>
