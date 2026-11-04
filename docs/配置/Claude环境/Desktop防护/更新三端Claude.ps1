@@ -7,6 +7,7 @@
 # 下载不做跨次续传：没下完的临时文件（Claude-<版本>-下载中.msix）直接删掉重下；10-20 的 416 续传分支就是为跨次续传存在的，删掉后不再有这条分支。
 # 安全边界：文件指纹与清单不同时必须带有效 Anthropic 签名；不结束进程、不改策略、不启动 Claude。
 # 10-24 并入环境卫士：三个版本源改为同时查；Update 加单实例锁；-RunDirectory、-ChangedOnly 只给卫士用，不传时行为不变。
+# 11-03 装插件时屏幕报已等秒数和下载重试，不再几分钟没有输出。环境卫士靠本文件含 --install-extension 判断插件能自动装，这个字样不能去掉。
 [CmdletBinding()]
 param(
     [ValidateSet('Update','Check')][string]$Action = 'Update',
@@ -143,6 +144,28 @@ function Get-VsCodeCli {
     if (-not $found) { $found = (Get-Command code.cmd -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
     if (-not $found) { throw '没有找到 VS Code 命令行 code.cmd；请在 VS Code 扩展页手动更新插件，退出 VS Code 后重跑。' }
     return $found
+}
+# 下载重试只记在 VS Code 自己的 cli.log 里，按 $Since 之后写过的最新一份数次数；读不到按 0 算，不影响安装。
+function Get-PluginRetryCount([datetime]$Since) {
+    $cliLog = Get-ChildItem -Path (Join-Path $env:APPDATA 'Code\logs\*\cli.log') -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $Since } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $cliLog) { return 0 }
+    return @(Get-Content -LiteralPath $cliLog.FullName -ErrorAction SilentlyContinue | Where-Object { $_ -match 'Failed downloading vsix' }).Count
+}
+# code 命令行下载时屏幕没有输出（11-03 一次下载 2 分 54 秒没完、中断后重试，用户以为卡死关了窗）：每 15 秒报一次已等多久，有重试就报重试。
+function Invoke-PluginInstall([string]$CodeCli, [string]$Version, [string]$LogPath) {
+    $started = Get-Date
+    $install = Start-Process -FilePath $CodeCli -ArgumentList @('--install-extension', ('anthropic.claude-code@' + $Version)) `
+        -NoNewWindow -PassThru -RedirectStandardOutput $LogPath -RedirectStandardError (Join-Path (Split-Path -Parent $LogPath) '插件安装-错误.log')
+    $null = $install.Handle  # 先拿住句柄，进程结束后才读得到 ExitCode
+    $retries = 0
+    while (-not $install.WaitForExit(15000)) {
+        $count = Get-PluginRetryCount $started
+        if ($count -gt $retries) { $retries = $count; Say '  插件下载中断，VS Code 正在自动重试（从头重下，约 1 分钟）…' }
+        $waited = [int]((Get-Date) - $started).TotalSeconds
+        $hint = if ($waited -lt 180) { '正常约 1 分钟，请不要关窗' } else { '比平时慢，可以继续等；也可以结束本次，改在 VS Code 扩展页手动更新，退出 VS Code 后再跑一次三端更新' }
+        Say ('  插件还在下载安装，已等 ' + $waited + ' 秒（' + $hint + '）')
+    }
+    return [pscustomobject]@{ ExitCode = $install.ExitCode; Retries = (Get-PluginRetryCount $started) }
 }
 function Get-PluginLatest {
     $body = '{"filters":[{"criteria":[{"filterType":7,"value":"anthropic.claude-code"}]}],"flags":16}'
@@ -327,11 +350,11 @@ try {
         Copy-Item -LiteralPath $registry -Destination $registryBackup -Force
         $codeCli = Get-VsCodeCli
         $pluginLog = Join-Path $runDir '插件安装.log'
-        Say ('安装插件 ' + $plugin.Version + ' → ' + $pluginLatest + '（VS Code 命令行，约 30 秒）…')
-        & $codeCli --install-extension ('anthropic.claude-code@' + $pluginLatest) *> $pluginLog
-        $codeExit = $LASTEXITCODE
+        Say ('安装插件 ' + $plugin.Version + ' → ' + $pluginLatest + '（VS Code 命令行，正常约 1 分钟，网络差时可能 4–5 分钟）…')
+        $installResult = Invoke-PluginInstall $codeCli $pluginLatest $pluginLog
+        $codeExit = $installResult.ExitCode
         $problem = if ($codeExit -ne 0) { 'code --install-extension 退出码 ' + $codeExit } else { Test-PluginRegistration $registry $pluginLatest }
-        $record.PluginInstall = [ordered]@{ From = $plugin.Version; To = $pluginLatest; Log = $pluginLog; Backup = $registryBackup; Problem = $problem }
+        $record.PluginInstall = [ordered]@{ From = $plugin.Version; To = $pluginLatest; Log = $pluginLog; Retries = $installResult.Retries; Backup = $registryBackup; Problem = $problem }
         if ($problem) {
             Copy-Item -LiteralPath $registryBackup -Destination $registry -Force
             throw ('插件安装后核对不通过（' + $problem + '），已用装之前的 extensions.json 恢复；日志：' + $pluginLog)
