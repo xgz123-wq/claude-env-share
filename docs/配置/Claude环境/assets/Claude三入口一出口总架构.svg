@@ -1,127 +1,191 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 580" width="1000" height="580" role="img" aria-label="Claude 环境总架构图：三个入口经 Clash 汇入 ACCOUNT-US 单一出口">
-  <title>Claude 环境总架构图</title>
-  <desc>Claude Code、专用 Chrome、Claude Desktop 各有专用端口，最终都汇入 Clash 的 ACCOUNT-US 组，再出到 Anthropic。WFP 直连防护拦下绕过代理的程序。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" id="flowmap" viewBox="0 0 1000 580" width="1000" height="580" role="img" aria-label="Claude 环境总架构：程序经三扇门和 TUN 进入 Clash，Claude 的流量都到 ACCOUNT-US；Clash 不在时由工牌保安和大门黑名单拦住直连">
   <defs>
     <style>
-      .t   { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; }
-      .ttl { font-size: 19px; font-weight: 700; fill: #1f2328; }
-      .zl  { font-size: 13px; font-weight: 700; fill: #59636e; }
-      .b   { font-size: 14px; font-weight: 600; fill: #1f2328; }
-      .s   { font-size: 11.5px; fill: #59636e; }
-      .x   { font-size: 12px; fill: #1f2328; }
-      .ln  { font-size: 13.5px; font-weight: 700; fill: #0969da; }
-      .cap { font-size: 13px; fill: #1f2328; }
-      .cp2 { font-size: 11.5px; fill: #59636e; }
-      .wl  { font-size: 11px; font-weight: 700; fill: #cf222e; }
-      .app   { fill: #f6f8fa; stroke: #d1d9e0; stroke-width: 1.2; }
-      .port  { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1.2; }
-      .rules { fill: #ddf4ff; stroke: #54aeff; stroke-width: 1.2; }
-      .exit  { fill: #fff1e5; stroke: #bc4c00; stroke-width: 1.6; }
-      .sink  { fill: #dafbe1; stroke: #1a7f37; stroke-width: 1.4; }
-      .mute  { fill: #f6f8fa; stroke: #d1d9e0; stroke-width: 1.2; stroke-dasharray: 4 3; }
-      .zone  { fill: none; stroke: #d1d9e0; stroke-width: 1; stroke-dasharray: 6 4; }
-      .wall  { fill: #cf222e; opacity: 0.85; }
-      .flow  { stroke: #59636e; stroke-width: 1.6; fill: none; }
-      .flowr { stroke: #bc4c00; stroke-width: 1.8; fill: none; stroke-dasharray: 6 3; }
-      .arw   { fill: #59636e; }
-      .arwr  { fill: #bc4c00; }
+      .fm-t { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif; }
+      .fm-m { font-family: "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", ui-monospace, monospace; }
+      .fm-b { font-size: 15px; font-weight: 700; fill: #2b2622; }
+      .fm-s { font-size: 12.5px; fill: #5a5148; }
+      .fm-h { font-size: 13px; font-weight: 700; fill: #857b70; }
+      .fm-port { font-size: 18px; font-weight: 700; fill: #a34e2a; }
+      .fm-note { font-size: 13px; font-weight: 700; fill: #a34e2a; }
+      .fm-acc { font-size: 21px; font-weight: 700; fill: #fffdfa; }
+      .fm-acs { font-size: 12.5px; fill: #f6e9df; }
+      .fm-red { font-size: 15px; font-weight: 700; fill: #9c2f2f; }
+      .fm-pill { font-size: 11px; font-weight: 700; fill: #9c2f2f; }
+      .fm-box { fill: #fffdfa; stroke: #d3cbbf; stroke-width: 1.3; }
+      .fm-door { fill: #fffdfa; stroke: #d9a98f; stroke-width: 1.6; }
+      .fm-rules { fill: #f8f5ef; stroke: #e4ddd1; stroke-width: 1.2; }
+      .fm-row { fill: #fffdfa; stroke: #e4ddd1; stroke-width: 1.2; }
+      .fm-row1 { fill: #f7ebe3; stroke: #d9a98f; stroke-width: 1.4; }
+      .fm-exit { fill: #a34e2a; }
+      .fm-ok { fill: #eef3ec; stroke: #8fab96; stroke-width: 1.5; }
+      .fm-mute { fill: #f8f5ef; stroke: #d3cbbf; stroke-width: 1.3; }
+      .fm-zone { fill: none; stroke: #d3cbbf; stroke-width: 1.2; stroke-dasharray: 6 5; }
+      .fm-band { fill: #fbf3ef; stroke: #e7cbc4; stroke-width: 1.2; }
+      .fm-gate { fill: #fffdfa; stroke: #9c2f2f; stroke-width: 1.6; }
+      .fm-pillbg { fill: #f3e2dd; }
+      .fm-g { stroke: #b5aca2; stroke-width: 1.8; fill: none; }
+      .fm-o { stroke: #a34e2a; stroke-width: 2.4; fill: none; }
+      .fm-od { stroke: #a34e2a; stroke-width: 2.4; fill: none; stroke-dasharray: 7 5; }
+      .fm-r { stroke: #9c2f2f; stroke-width: 2; fill: none; stroke-dasharray: 6 5; }
+      .fm-ma { fill: #b5aca2; } .fm-mo { fill: #a34e2a; } .fm-mr { fill: #9c2f2f; }
+      .fm-dot { fill: #a34e2a; }
+      .fm-dotg { fill: #857b70; }
+      @media (prefers-reduced-motion: reduce) { #ambient { display: none; } }
     </style>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M0,0 L10,5 L0,10 z" class="arw"/>
-    </marker>
-    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-      <path d="M0,0 L10,5 L0,10 z" class="arwr"/>
-    </marker>
+    <marker id="fm-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fm-ma"/></marker>
+    <marker id="fm-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fm-mo"/></marker>
+    <marker id="fm-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fm-mr"/></marker>
   </defs>
 
-  <rect width="1000" height="580" fill="#ffffff"/>
-  <text x="24" y="40" class="t ttl">Claude 环境：三个入口，一个出口</text>
+  <rect width="1000" height="580" fill="#fffdfa"/>
+  <rect class="fm-band" x="10" y="470" width="980" height="100" rx="14"/>
 
-  <rect x="24" y="64" width="220" height="456" rx="12" class="zone"/>
-  <text x="40" y="88" class="t zl">你的程序</text>
+  <!-- 线 -->
+  <path id="p-desktop" class="fm-p fm-o" d="M206,60 C234,60 234,76 260,76" marker-end="url(#fm-c)"/>
+  <path id="p-code" class="fm-p fm-o" d="M206,116 C234,116 234,92 260,92" marker-end="url(#fm-c)"/>
+  <path id="p-chrome" class="fm-p fm-o" d="M206,196 H260" marker-end="url(#fm-c)"/>
+  <path id="p-cli" class="fm-p fm-o" d="M206,276 C234,276 234,300 260,300" marker-end="url(#fm-c)"/>
+  <path id="p-plugin" class="fm-p fm-o" d="M206,332 C234,332 234,316 260,316" marker-end="url(#fm-c)"/>
+  <path id="p-other" class="fm-p fm-g" d="M206,416 H260" marker-end="url(#fm-a)"/>
+  <path id="p-d67-acc" class="fm-p fm-od" d="M380,84 H668 C690,84 690,150 704,150" marker-end="url(#fm-c)"/>
+  <path id="p-d66-acc" class="fm-p fm-od" d="M380,196 C410,196 410,112 440,112 H654 C680,112 680,176 704,176" marker-end="url(#fm-c)"/>
+  <path id="p-d65-box" class="fm-p fm-o" d="M380,308 H438" marker-end="url(#fm-c)"/>
+  <path id="p-tun-box" class="fm-p fm-g" d="M380,416 C408,416 408,392 438,392" marker-end="url(#fm-a)"/>
+  <path id="p-r1-acc" class="fm-p fm-o" d="M636,234 C670,234 670,194 704,192" marker-end="url(#fm-c)"/>
+  <path id="p-r2-direct" class="fm-p fm-g" d="M636,302 H704" marker-end="url(#fm-a)"/>
+  <path id="p-r3-proxy" class="fm-p fm-g" d="M636,370 H704" marker-end="url(#fm-a)"/>
+  <path id="p-acc-anth" class="fm-p fm-o" d="M843,124 V88" marker-end="url(#fm-c)"/>
+  <path id="p-off-g1" class="fm-p fm-r" d="M130,523 H260" marker-end="url(#fm-d)"/>
+  <path id="p-g1-g2" class="fm-p fm-r" d="M492,523 H520" marker-end="url(#fm-d)"/>
+  <path id="p-g2-end" class="fm-p fm-r" d="M752,512 C764,512 768,503 780,503" marker-end="url(#fm-d)"/>
+  <path id="p-g2-wan" class="fm-p fm-g" d="M752,534 C764,534 768,546 780,546" marker-end="url(#fm-a)"/>
 
-  <rect x="300" y="64" width="404" height="456" rx="12" class="zone"/>
-  <text x="316" y="88" class="t zl">Clash Verge（mihomo 内核）</text>
+  <!-- Clash 范围 -->
+  <rect id="n-clash" class="fm-zone" x="246" y="20" width="404" height="436" rx="14"/>
+  <text id="t-clash" x="260" y="44" class="fm-t fm-h">Clash</text>
+  <text id="n-note" x="540" y="74" text-anchor="middle" class="fm-n fm-t fm-note">整扇门进出口</text>
 
-  <rect x="760" y="64" width="216" height="456" rx="12" class="zone"/>
-  <text x="776" y="88" class="t zl">出口</text>
+  <!-- 程序 -->
+  <g id="n-desktop" class="fm-n fm-pick" data-pick="desktop">
+    <rect class="fm-box" x="20" y="36" width="186" height="48" rx="10"/>
+    <text x="34" y="66" class="fm-t fm-b">Desktop 主程序</text>
+    <rect class="fm-pillbg" x="164" y="50" width="34" height="20" rx="5"/><text x="181" y="64.5" text-anchor="middle" class="fm-t fm-pill">保安</text>
+  </g>
+  <g id="n-code" class="fm-n fm-pick" data-pick="code">
+    <rect class="fm-box" x="20" y="92" width="186" height="48" rx="10"/>
+    <text x="34" y="122" class="fm-t fm-b">Code 标签页</text>
+  </g>
+  <g id="n-chrome" class="fm-n fm-pick" data-pick="chrome">
+    <rect class="fm-box" x="20" y="172" width="186" height="48" rx="10"/>
+    <text x="34" y="202" class="fm-t fm-b">专用 Chrome</text>
+  </g>
+  <g id="n-cli" class="fm-n fm-pick" data-pick="cli">
+    <rect class="fm-box" x="20" y="252" width="186" height="48" rx="10"/>
+    <text x="34" y="282" class="fm-t fm-b">Claude Code</text>
+    <rect class="fm-pillbg" x="164" y="266" width="34" height="20" rx="5"/><text x="181" y="280.5" text-anchor="middle" class="fm-t fm-pill">保安</text>
+  </g>
+  <g id="n-plugin" class="fm-n fm-pick" data-pick="plugin">
+    <rect class="fm-box" x="20" y="308" width="186" height="48" rx="10"/>
+    <text x="34" y="338" class="fm-t fm-b">VS Code 插件</text>
+    <rect class="fm-pillbg" x="164" y="322" width="34" height="20" rx="5"/><text x="181" y="336.5" text-anchor="middle" class="fm-t fm-pill">保安</text>
+  </g>
+  <g id="n-other" class="fm-n fm-pick" data-pick="other">
+    <rect class="fm-mute" x="20" y="392" width="186" height="48" rx="10"/>
+    <text x="34" y="422" class="fm-t fm-b">其他程序</text>
+  </g>
 
-  <rect x="256" y="110" width="12" height="66" rx="3" class="wall"/>
-  <rect x="256" y="298" width="12" height="66" rx="3" class="wall"/>
-  <text x="262" y="104" text-anchor="middle" class="t wl">WFP</text>
-  <text x="262" y="292" text-anchor="middle" class="t wl">WFP</text>
+  <!-- 门 -->
+  <g id="n-d67" class="fm-n">
+    <rect class="fm-door" x="262" y="56" width="118" height="56" rx="10"/>
+    <text x="321" y="82" text-anchor="middle" class="fm-m fm-port">43867</text>
+    <text x="321" y="101" text-anchor="middle" class="fm-t fm-s">Desktop 的门</text>
+  </g>
+  <g id="n-d66" class="fm-n">
+    <rect class="fm-door" x="262" y="168" width="118" height="56" rx="10"/>
+    <text x="321" y="194" text-anchor="middle" class="fm-m fm-port">43866</text>
+    <text x="321" y="213" text-anchor="middle" class="fm-t fm-s">Chrome 的门</text>
+  </g>
+  <g id="n-d65" class="fm-n">
+    <rect class="fm-door" x="262" y="280" width="118" height="56" rx="10"/>
+    <text x="321" y="306" text-anchor="middle" class="fm-m fm-port">43865</text>
+    <text x="321" y="325" text-anchor="middle" class="fm-t fm-s">通用的门</text>
+  </g>
+  <g id="n-tun" class="fm-n">
+    <rect class="fm-box" x="262" y="388" width="118" height="56" rx="10"/>
+    <text x="321" y="413" text-anchor="middle" class="fm-t fm-b">TUN</text>
+    <text x="321" y="432" text-anchor="middle" class="fm-t fm-s">全机接管</text>
+  </g>
 
-  <rect x="40" y="110" width="188" height="66" rx="9" class="app"/>
-  <text x="134" y="137" text-anchor="middle" class="t b">Claude Code</text>
-  <text x="134" y="158" text-anchor="middle" class="t s">settings.json 的 env</text>
+  <!-- 规则 -->
+  <g id="n-rules" class="fm-n">
+    <rect class="fm-rules" x="440" y="168" width="196" height="246" rx="12"/>
+    <text x="456" y="193" class="fm-t fm-h">规则：从上往下</text>
+  </g>
+  <g id="n-r1" class="fm-n">
+    <rect class="fm-row1" x="452" y="206" width="172" height="56" rx="9"/>
+    <text x="538" y="239" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">Claude 的域名和 IP</text>
+  </g>
+  <g id="n-r2" class="fm-n">
+    <rect class="fm-row" x="452" y="274" width="172" height="56" rx="9"/>
+    <text x="538" y="307" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">国内网站</text>
+  </g>
+  <g id="n-r3" class="fm-n">
+    <rect class="fm-row" x="452" y="342" width="172" height="56" rx="9"/>
+    <text x="538" y="375" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">其余</text>
+  </g>
 
-  <rect x="40" y="204" width="188" height="66" rx="9" class="app"/>
-  <text x="134" y="231" text-anchor="middle" class="t b">专用 Chrome</text>
-  <text x="134" y="252" text-anchor="middle" class="t s">桌面快捷方式启动参数</text>
+  <!-- 出口 -->
+  <g id="n-anth" class="fm-n">
+    <rect class="fm-ok" x="706" y="30" width="274" height="56" rx="11"/>
+    <text x="843" y="65" text-anchor="middle" class="fm-t fm-b" style="font-size:16px">Anthropic</text>
+  </g>
+  <g id="n-acc" class="fm-n">
+    <rect class="fm-exit" x="706" y="124" width="274" height="84" rx="13"/>
+    <text x="843" y="160" text-anchor="middle" class="fm-m fm-acc">ACCOUNT-US</text>
+    <text x="843" y="186" text-anchor="middle" class="fm-t fm-acs">你手选的节点，挂了就断</text>
+  </g>
+  <g id="n-direct" class="fm-n">
+    <rect class="fm-mute" x="706" y="274" width="274" height="56" rx="11"/>
+    <text x="843" y="307" text-anchor="middle" class="fm-t fm-b">直连，走宽带</text>
+  </g>
+  <g id="n-proxy" class="fm-n">
+    <rect class="fm-mute" x="706" y="342" width="274" height="56" rx="11"/>
+    <text x="843" y="375" text-anchor="middle" class="fm-t fm-b">Proxy，普通国外网站</text>
+  </g>
 
-  <rect x="40" y="298" width="188" height="66" rx="9" class="app"/>
-  <text x="134" y="325" text-anchor="middle" class="t b">Claude Desktop</text>
-  <text x="134" y="346" text-anchor="middle" class="t s">HKLM 策略 egressProxyUrl</text>
+  <!-- Clash 不在时 -->
+  <g id="n-off" class="fm-n">
+    <text x="26" y="516" class="fm-t fm-red">Clash 不在时</text>
+    <text x="26" y="538" class="fm-t fm-s">想绕开门直连</text>
+  </g>
+  <g id="n-g1" class="fm-n">
+    <rect class="fm-gate" x="262" y="486" width="230" height="74" rx="11"/>
+    <text x="377" y="517" text-anchor="middle" class="fm-t fm-red">工牌保安（WFP）</text>
+    <text x="377" y="540" text-anchor="middle" class="fm-t fm-s">名单内的程序只许连本机</text>
+  </g>
+  <g id="n-g2" class="fm-n">
+    <rect class="fm-gate" x="522" y="486" width="230" height="74" rx="11"/>
+    <text x="637" y="517" text-anchor="middle" class="fm-t fm-red">大门黑名单（防火墙）</text>
+    <text x="637" y="540" text-anchor="middle" class="fm-t fm-s">谁直连 Anthropic 网段都拦</text>
+  </g>
+  <g id="n-end" class="fm-n">
+    <rect class="fm-gate" x="782" y="482" width="198" height="40" rx="10"/>
+    <text x="881" y="507" text-anchor="middle" class="fm-t fm-red">拦下，连不上</text>
+  </g>
+  <g id="n-wan" class="fm-n">
+    <rect class="fm-mute" x="782" y="526" width="198" height="40" rx="10"/>
+    <text x="881" y="551" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">别的地址：走宽带</text>
+  </g>
 
-  <rect x="40" y="392" width="188" height="66" rx="9" class="app"/>
-  <text x="134" y="419" text-anchor="middle" class="t b">其他应用</text>
-  <text x="134" y="440" text-anchor="middle" class="t s">不设置代理</text>
-
-  <rect x="320" y="110" width="152" height="66" rx="9" class="port"/>
-  <text x="396" y="137" text-anchor="middle" class="t ln">HTTP 43865</text>
-  <text x="396" y="158" text-anchor="middle" class="t s">混合端口（设置页）</text>
-
-  <rect x="320" y="204" width="152" height="66" rx="9" class="port"/>
-  <text x="396" y="231" text-anchor="middle" class="t ln">SOCKS 43866</text>
-  <text x="396" y="252" text-anchor="middle" class="t s">脚本建的监听</text>
-
-  <rect x="320" y="298" width="152" height="66" rx="9" class="port"/>
-  <text x="396" y="325" text-anchor="middle" class="t ln">HTTP 43867</text>
-  <text x="396" y="346" text-anchor="middle" class="t s">脚本建的监听</text>
-
-  <rect x="320" y="392" width="152" height="66" rx="9" class="port"/>
-  <text x="396" y="419" text-anchor="middle" class="t b">TUN 虚拟网卡</text>
-  <text x="396" y="440" text-anchor="middle" class="t s">接管全机流量</text>
-
-  <rect x="516" y="110" width="176" height="180" rx="9" class="rules"/>
-  <text x="528" y="134" class="t b">规则链（命中即停）</text>
-  <text x="528" y="160" class="t x">① IN-NAME:43866 入组</text>
-  <text x="528" y="184" class="t x">② Claude 域名 / IP / ASN</text>
-  <text x="528" y="208" class="t x">③ DoH 端点 → DIRECT</text>
-  <text x="528" y="232" class="t x">④ 订阅规则（国内直连）</text>
-  <text x="528" y="256" class="t x">⑤ MATCH 兜底</text>
-
-  <rect x="516" y="372" width="176" height="88" rx="9" class="mute"/>
-  <text x="604" y="406" text-anchor="middle" class="t b">订阅自带组 / DIRECT</text>
-  <text x="604" y="430" text-anchor="middle" class="t s">普通流量、国内流量</text>
-
-  <rect x="776" y="170" width="184" height="72" rx="10" class="sink"/>
-  <text x="868" y="202" text-anchor="middle" class="t b">Anthropic 官方服务</text>
-  <text x="868" y="226" text-anchor="middle" class="t s">api.anthropic.com / claude.ai</text>
-
-  <rect x="776" y="282" width="184" height="104" rx="10" class="exit"/>
-  <text x="868" y="316" text-anchor="middle" class="t b" style="font-size:17px">ACCOUNT-US</text>
-  <text x="868" y="342" text-anchor="middle" class="t s">select · 你手选的节点</text>
-  <text x="868" y="364" text-anchor="middle" class="t s">不自动切换</text>
-
-  <path d="M228,143 H314" class="flow" marker-end="url(#a)"/>
-  <path d="M228,237 H314" class="flow" marker-end="url(#a)"/>
-  <path d="M228,331 H314" class="flow" marker-end="url(#a)"/>
-  <path d="M228,425 H314" class="flow" marker-end="url(#a)"/>
-
-  <path d="M472,143 L512,152" class="flow" marker-end="url(#a)"/>
-  <path d="M472,237 L512,206" class="flow" marker-end="url(#a)"/>
-  <path d="M472,425 L512,262" class="flow" marker-end="url(#a)"/>
-
-  <path d="M604,290 V366" class="flow" marker-end="url(#a)"/>
-
-  <path d="M692,200 L736,200 L736,310 L770,310" class="flow" marker-end="url(#a)"/>
-  <path d="M472,331 L708,331 L708,350 L770,350" class="flowr" marker-end="url(#ar)"/>
-  <path d="M868,282 V248" class="flow" marker-end="url(#a)"/>
-
-  <rect x="516" y="306" width="176" height="22" fill="#ffffff"/>
-  <text x="604" y="322" text-anchor="middle" class="t" style="font-size:12px;fill:#bc4c00;font-weight:600">指定 proxy，不看规则</text>
-
-  <text x="500" y="542" text-anchor="middle" class="t cap">三个入口各有专用端口，最终都汇到同一个出口；节点挂了就断，不会自动切换、更不会退回直连。</text>
-  <text x="500" y="564" text-anchor="middle" class="t cp2">红色竖条 = WFP 程序级直连防护：程序只允许连本机端口，绕过代理直连外网会被内核拦下。</text>
+  <!-- 平时的流动：没有脚本也会动 -->
+  <g id="ambient">
+    <circle r="5.5" class="fm-dot"><animateMotion dur="3.2s" repeatCount="indefinite" path="M206,60 C234,60 234,84 262,84 H668 C690,84 690,150 704,150"/></circle>
+    <circle r="5.5" class="fm-dot"><animateMotion dur="3.6s" repeatCount="indefinite" begin="0.6s" path="M206,116 C234,116 234,84 262,84 H668 C690,84 690,150 704,150"/></circle>
+    <circle r="5.5" class="fm-dot"><animateMotion dur="3.4s" repeatCount="indefinite" begin="0.3s" path="M206,196 H380 C410,196 410,112 440,112 H654 C680,112 680,176 704,176"/></circle>
+    <circle r="5.5" class="fm-dot"><animateMotion dur="3.8s" repeatCount="indefinite" begin="0.9s" path="M206,276 C234,276 234,308 262,308 H440 L538,234 H636 C670,234 670,194 704,192"/></circle>
+    <circle r="5.5" class="fm-dot"><animateMotion dur="4s" repeatCount="indefinite" begin="1.6s" path="M206,332 C234,332 234,308 262,308 H440 L538,234 H636 C670,234 670,194 704,192"/></circle>
+    <circle r="5.5" class="fm-dot"><animateMotion dur="1.4s" repeatCount="indefinite" path="M843,124 V88"/></circle>
+    <circle r="4.5" class="fm-dotg"><animateMotion dur="4.6s" repeatCount="indefinite" begin="1.2s" path="M206,416 H380 C408,416 408,392 440,392 L538,370 H704"/></circle>
+  </g>
 </svg>

@@ -11,7 +11,7 @@ description: Claude Code / Claude Desktop 安全出口链路的核对、验收�
 
 ## 30 秒认知
 
-1. **配置主体是 Clash Verge Rev 的全局扩展脚本** `Script.js`（权威副本 `docs/配置/Claude环境/Clash/Clash全局账号通道.js`），跟订阅解耦，换订阅自动适配。
+1. **配置主体是 Clash Verge Rev 的全局扩展脚本** `Script.js`（权威副本 `docs/配置/Claude环境/Clash/Clash全局账号通道.js`），跟订阅解耦，换订阅自动适配。Claude 规则只在 JS 的规则清单一段维护，验证脚本和入口页都从它读。
 2. **三个端口三条腿**：`43865` Claude Code（HTTP）、`43866` 专用 Chrome（SOCKS5）、`43867` Claude Desktop（HTTP），必须汇到同一个出口 IP。
 3. **只代理 Claude，不做全局代理**：TUN + 规则分流，系统代理关闭。
 4. **兜底四层**：置顶规则兜「走错组」、TUN strict-route + 53 劫持兜「DNS 旁路」、WFP 精确阻断兜「Claude 程序绕开代理直连」、防火墙网段阻断兜「任何程序直连 `160.79.104.0/23`、`153.61.224.0/22`」。
@@ -36,6 +36,8 @@ Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)
 | Desktop 启动门禁（只检查不启动） | `pwsh -NoProfile -File docs/配置/Claude环境/启动Claude英文浏览器.ps1 -CheckOnly` |
 | Anthropic 网段阻断：检查 / 安装（安装需管理员，用户做） | `pwsh -NoProfile -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 [-Action Install]` |
 | Claude 官方域名每周复核 | `pwsh -NoProfile -File docs/配置/Claude环境/Clash/检查Claude官方域名.ps1` |
+| 实测某个域名或 IP 走哪条规则 | `pwsh -NoProfile -File docs/配置/Claude环境/Clash/查域名走哪条规则.ps1 <域名或IP>` |
+| 改了 JS、网段或图后更新入口页 | `pwsh -NoProfile -File docs/配置/Claude环境/工具/生成架构讲解.ps1` |
 | 改了脚本或文档后自检 | `pwsh -NoProfile -File docs/配置/Claude环境/工具/检查脚本完整性.ps1` |
 | 新建账号专用 Chrome | `pwsh -NoProfile -File docs/配置/Claude环境/工具/创建账号浏览器.ps1 -Alias <别名>`（说明见 `docs/配置/Claude环境/说明/账号浏览器.md`） |
 | 回滚 Clash 账号通道 | `pwsh -NoProfile -File docs/配置/Claude环境/工具/回滚Clash配置.ps1 -BackupDirectory <备份目录>` |
@@ -53,6 +55,7 @@ Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)
 | 换订阅 / 换节点 | [03 SOP-1](references/03-变更与回滚SOP.md#sop-1-导入新订阅或换节点后复核)：脚本规则不用改，只需手动选节点再复核 |
 | Claude 三端更新 | 走 [claude-maintenance](../claude-maintenance/SKILL.md) |
 | 改端口 / 改组名 | [03 SOP-3](references/03-变更与回滚SOP.md#sop-3-改端口或改组名) |
+| 收到外部域名或网段清单 | [03 SOP-6](references/03-变更与回滚SOP.md#sop-6-收到外部域名或网段清单) |
 | 连不上 / 疑似泄漏 | **国内网站正常、走代理的全挂**时先跑 `ping -f -l 1472 8.8.8.8`，超时就是 MTU 黑洞（决策树第 -1 步），不换订阅不换节点；其余按决策树走 |
 | 要撤销变更 | [03 SOP-4](references/03-变更与回滚SOP.md#sop-4-回滚) |
 
@@ -72,11 +75,13 @@ Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)
 | **防火墙** | 把两个直连阻断机制混为一谈 | Claude 程序的 WFP 精确过滤器不在 `Get-NetFirewallRule` 里；`160.79.104.0/23`、`153.61.224.0/22` 的系统出站规则在防火墙规则表里，用 `Anthropic网段直连阻断.ps1` 核对 |
 | **运行脚本** | 用 Windows PowerShell 5.1 跑 | 必须 pwsh 7：脚本是无 BOM UTF-8，5.1 按 GBK 读会整片解析失败；5.1 与 7 共存不是冲突，不要卸载 5.1 |
 | **网段** | 以为 `/21` 和 `/23` 有一个写错 | Clash 用 `160.79.104.0/21` 分流，防火墙用 `160.79.104.0/23` 阻断，是两件事；`153.61.224.0/22` 两边写法相同 |
+| **子域名** | Clash 规则页搜不到子域名，就以为没覆盖 | 是后缀覆盖，规则页只显示后缀本身；用 `Clash/查域名走哪条规则.ps1` 实测 |
 
 ## 参考文件
 
 | 文件 | 内容 |
 |---|---|
+| `docs/配置/Claude环境/说明/架构讲解.html` | 用户入口：架构图、流量、防护五层、规则全表，给用户讲时用它 |
 | [references/01-架构与配置主体.md](references/01-架构与配置主体.md) | `Script.js` 六步逻辑、Claude Code / Desktop 配置、WFP、关键路径 |
 | [references/02-验收与排查手册.md](references/02-验收与排查手册.md) | 验收入口与合格线、IP 站判读、故障决策树、环境坑、「不是问题」清单 |
 | [references/03-变更与回滚SOP.md](references/03-变更与回滚SOP.md) | 换订阅、三端更新指路、改端口、回滚、变更后收尾 |

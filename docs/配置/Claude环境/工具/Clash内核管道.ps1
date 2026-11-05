@@ -52,3 +52,26 @@ function Get-ClashPipeName {
   }
   throw ('连不上 Clash 内核接口（Clash Verge 没开，或管道名又变了）；试过：' + ($candidates -join '、'))
 }
+
+# 只读调内核接口，返回解析好的 JSON。用 HTTP/1.0：内核不发 chunked，读到连接关闭就是完整响应。
+# 连不上或不是 200 就抛异常，由调用方决定怎么报。
+function Invoke-ClashApi {
+  param([Parameter(Mandatory)] [string] $Path, [int] $TimeoutMs = 5000)
+  $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', (Get-ClashPipeName), [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::Asynchronous)
+  try {
+    $pipe.Connect(3000)
+    $bytes = [System.Text.Encoding]::ASCII.GetBytes("GET $Path HTTP/1.0`r`nHost: localhost`r`nConnection: close`r`n`r`n")
+    $pipe.Write($bytes, 0, $bytes.Length)
+    $pipe.Flush()
+    $buffer = [IO.MemoryStream]::new()
+    if (-not $pipe.CopyToAsync($buffer).Wait($TimeoutMs)) { throw "内核接口 $Path 超过 $TimeoutMs 毫秒没读完" }
+    $response = [System.Text.Encoding]::UTF8.GetString($buffer.ToArray())
+    $split = $response.IndexOf("`r`n`r`n")
+    if ($split -lt 0) { throw "内核接口 $Path 返回内容不完整" }
+    $status = ($response.Substring(0, $split) -split "`r`n")[0]
+    if ($status -notmatch ' 200 ') { throw "内核接口 $Path 返回 $status" }
+    $response.Substring($split + 4) | ConvertFrom-Json
+  } finally {
+    $pipe.Dispose()
+  }
+}

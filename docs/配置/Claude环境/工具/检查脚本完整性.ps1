@@ -67,7 +67,9 @@ $required = @(
   'Claude环境一键总检.ps1'
   '启动Claude英文浏览器.ps1'
   'Anthropic网段直连阻断.ps1'
+  'Clash\Clash全局账号通道.js'
   'Clash\验证Clash账号专用通道.ps1'
+  'Clash\查域名走哪条规则.ps1'
   'Desktop防护\更新三端Claude.ps1'
   'Desktop防护\一键更新ClaudeDesktop.ps1'
   'Desktop防护\更新ClaudeDesktop.ps1'
@@ -76,6 +78,9 @@ $required = @(
   '工具\读部署清单.ps1'
   '工具\写部署清单.ps1'
   '工具\Clash内核管道.ps1'
+  '工具\读Claude规则.ps1'
+  '工具\生成架构讲解.ps1'
+  '说明\架构讲解.html'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $envRoot $_)) })
 if ($missing) { foreach ($m in $missing) { Add-Result FAIL '必需文件' "缺少 $m" } }
@@ -126,6 +131,31 @@ $deadLinks = foreach ($doc in $docs) {
 }
 if ($deadLinks) { foreach ($d in $deadLinks) { Add-Result FAIL '文档链接' $d } }
 else { Add-Result PASS '文档链接' "$($docs.Count) 份文档、$linkCount 个相对链接全部有效" }
+
+# 7. 入口页：规则表和图要跟 JS、网段脚本、SVG 一致；页面里的相对链接和页内锚点要有效。规则清单读不出来也在这里报。
+$entryPage = Join-Path $envRoot '说明\架构讲解.html'
+try {
+  $fresh = & (Join-Path $PSScriptRoot '生成架构讲解.ps1') -Check
+  if ($fresh.Fresh) { Add-Result PASS '入口页与规则一致' '说明\架构讲解.html 的规则表、网段表和图都是最新' }
+  else { Add-Result FAIL '入口页与规则一致' $fresh.Problems }
+  $entryText = [IO.File]::ReadAllText($entryPage)
+  $entryDead = @()
+  $entryCount = 0
+  foreach ($m in [regex]::Matches($entryText, 'href="([^"]+)"')) {
+    $target = $m.Groups[1].Value
+    $entryCount++
+    if ($target -match '^https?:') { continue }
+    if ($target.StartsWith('#')) {
+      if ($entryText -notmatch ('id="' + [regex]::Escape($target.Substring(1)) + '"')) { $entryDead += $target }
+      continue
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path (Split-Path $entryPage -Parent) ($target -split '#')[0]))) { $entryDead += $target }
+  }
+  if ($entryDead) { Add-Result FAIL '入口页链接' ($entryDead -join '、') }
+  else { Add-Result PASS '入口页链接' "$entryCount 个链接全部有效" }
+} catch {
+  Add-Result FAIL '入口页与规则一致' $_.Exception.Message
+}
 
 $color = @{ PASS = 'Green'; WARN = 'Yellow'; FAIL = 'Red' }
 foreach ($r in $results) { Write-Host ('[{0,-4}] {1}' -f $r.Status, $r.Item) -ForegroundColor $color[$r.Status]; Write-Host ('       ' + $r.Evidence) }

@@ -1,6 +1,6 @@
 # Claude 环境分享版
 
-让 **Claude Code**、**Claude Desktop** 和**专用 Chrome** 走同一条干净、固定的代理出口；出口不通就断网，绝不偷偷直连。
+让 **Claude Code**、**Claude Desktop** 和**专用 Chrome** 走同一条干净、固定的代理出口；出口不通就断网，不退回直连。
 
 [![Stars](https://img.shields.io/github/stars/xgz123-wq/claude-env-share?style=flat-square&logo=github)](https://github.com/xgz123-wq/claude-env-share/stargazers)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=flat-square)
@@ -11,8 +11,22 @@
 
 > 2026-10-01 从一台稳定运行的 Windows 机器整理，之后随原机器维护同步（见[提交记录](https://github.com/xgz123-wq/claude-env-share/commits/master)）。已去掉账号别名、出口 IP 和本机状态文件。
 
+## 怎么看这个仓库
+
+**只看一页就够**：下载后双击 [架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)，图能点，规则能查，出问题怎么办也在里面。
+
+| 你想做什么 | 看哪里 |
+|---|---|
+| 部署到新机器 | 下面的[快速上手](#快速上手)，部署交给 AI |
+| 每天用 | 桌面「Claude 环境卫士」 |
+| 看懂架构和规则 | `架构讲解.html` |
+| 查错 | 把报错发给 AI，或看 `架构讲解.html` 的「出问题」 |
+
+`AGENTS.md`、Skill 和脚本是给 AI 的，不用读。
+
 ## 目录
 
+- [怎么看这个仓库](#怎么看这个仓库)
 - [适用条件](#适用条件)
 - [快速上手](#快速上手)
 - [端口说明](#端口说明)
@@ -104,21 +118,19 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 
 如果部署前 `43866` 或 `43867` 已被别的程序占用，先关掉那个程序或改它的端口，再部署。
 
-不建议改这套配置的端口号：端口写在 Clash 脚本、Claude Code 设置、Desktop 策略、快捷方式和检查脚本里，改一个就要同步几十处。确实要改时，按 Skill 的 [SOP-3 改端口流程](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md)操作，先按 SOP 里的 grep 命令列出所有出现位置。
+不建议改这套配置的端口号：Clash 脚本、Claude Code 设置、Desktop 策略和快捷方式都要跟着改，容易漏。确实要改时，按 Skill 的 [SOP-3 改端口流程](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md)操作。
 
 ## 工作原理
 
-| 层 | 做了什么 |
-|---|---|
-| Clash | 全局扩展脚本新建 `ACCOUNT-US` 组，Claude 域名、IP 段和 `43866` / `43867` 的流量都进这个组；国内流量照常直连 |
-| 系统 | 网卡、Clash、DNS 三层关闭 IPv6；开 TUN、关系统代理；防火墙阻断直连 Anthropic 官方 IP 段 |
-| 程序 | Claude Code 的代理环境变量、专用 Chrome 的启动参数、Desktop 的 HKLM 策略都写死各自的端口；直连防护（WFP）在内核层拦截这些程序绕过代理的出站 |
+![防护五层](docs/配置/Claude环境/assets/Claude防护五层.svg)
 
-`ACCOUNT-US` 是手选组：节点挂了就停在那里失败，不会自动换节点，也不会退回直连。
+- **节点挂了**：`ACCOUNT-US` 是手选组，就停在那里失败，不会自动换节点，也不会退回直连。
+- **Clash 不在时**：直连防护名单内的程序（Desktop 主程序、Claude Code、VS Code 插件）只断网。
+- **已知边界**：Code 标签页、Cowork 虚拟机、GitHub MCP、curl、git、node 在名单外，Clash 不在时只有 Anthropic 网段被防火墙拦。
 
 想了解细节，按这个顺序看：
 
-1. [架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)：每个配置点的含义，出问题定位到哪一层（下载后双击打开）。
+1. [架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)：可点的架构图、规则查询、出问题怎么办（下载后双击打开）。
 2. [规则顺序与三道硬拦](docs/配置/Claude环境/README.md#规则匹配顺序)：规则怎么匹配、系统层拦什么。
 3. [DNS 分层说明](docs/配置/Claude环境/说明/DNS分层说明.md)、[账号浏览器](docs/配置/Claude环境/说明/账号浏览器.md)：DNS、IPv6 和专用 Chrome 的每个参数。
 
@@ -126,7 +138,9 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 
 | 要做什么 | 怎么做 |
 |---|---|
-| 每天开工前检查 | 双击桌面「Claude-环境一键总检」，再按[日常使用](docs/配置/Claude环境/说明/日常使用.md)做网页验收 |
+| 每天开工前检查 | 打开桌面「Claude 环境卫士」做体检，再按[日常使用](docs/配置/Claude环境/说明/日常使用.md)做网页验收；想查得更深，双击「Claude-环境一键总检」 |
+| 查某个域名走哪 | 打开[架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)的「规则查询」 |
+| 收到新域名或网段 | 发给 AI，说「对比一下我的规则」；流程在 Skill 的 [SOP-6](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md) |
 | 看三端要不要更新 | `pwsh -NoProfile -File docs\配置\Claude环境\Desktop防护\更新三端Claude.ps1 -Action Check` |
 | 更新三端 | 退出全部 Claude 后双击桌面「Claude-三端更新」，细节见[更新维护说明](docs/配置/Claude环境/Desktop防护/更新维护说明.md) |
 
@@ -173,7 +187,7 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 <details>
 <summary><b>什么是直连防护（WFP）？</b></summary>
 
-WFP 是 Windows 内核自带的网络过滤框架。这套配置用它给指定程序加规则：只允许连本机回环（也就是代理），想直接连外网就被内核拦下。防火墙规则拦的是目标 IP，WFP 拦的是发起程序，所以更严。
+WFP 是 Windows 内核自带的网络过滤框架。这套配置用它给 Desktop 主程序、Claude Code 和 VS Code 插件加规则：只允许连本机回环（也就是代理），想直接连外网就被内核拦下。防火墙规则拦的是目标 IP，WFP 拦的是发起程序，名单内的程序更严。
 
 程序路径、文件哈希、规则 GUID 每台机器都不同，分享包里只有[示例文件](docs/配置/Claude环境/Desktop防护/应用过滤目标.示例.json)，部署时在本机生成。
 </details>
@@ -185,10 +199,10 @@ Claude环境分享版/
 ├─ AGENTS.md                 给 AI 的部署步骤和维护约束
 ├─ CLAUDE.md                 一行 @AGENTS.md，让 Claude 读同一份约定
 ├─ docs/配置/Claude环境/     日常使用的脚本和说明（桌面图标指向这里）
-│  ├─ Clash/                 全局扩展脚本、通道验证、官方域名复核
+│  ├─ Clash/                 全局扩展脚本、通道验证、官方域名复核、查域名走哪条规则
 │  ├─ Desktop防护/           直连防护、43867 通道、三端更新
-│  ├─ 工具/                  完整性检查与一次性安装、回滚工具
-│  ├─ 说明/                  架构讲解和四份专题说明
+│  ├─ 工具/                  完整性检查、入口页生成与一次性安装、回滚工具
+│  ├─ 说明/                  入口页（架构讲解）和四份专题说明
 │  └─ assets/                架构图与图标
 └─ .agents/skills/
    ├─ claude-safe-network/   排障说明（命令指回 docs）
@@ -199,7 +213,7 @@ Claude环境分享版/
 
 ## 边界与许可
 
-- **只保证**：出口固定、不泄漏、不绕过代理。
+- **目标**：出口固定、不泄漏、不绕过代理；已知边界见[工作原理](#工作原理)。
 - **不做**：规避检测、伪装身份、绕过 Anthropic 的地区或账号规则。使用前请确认你所在地区和付款方式符合 Anthropic 条款。
 - **许可**：[MIT License](LICENSE)。脚本会改动系统网络和防火墙设置，风险由使用者自负。
 

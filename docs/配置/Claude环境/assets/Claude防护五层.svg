@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 470" width="1000" height="470" role="img" aria-label="防护五层：分路、防漏、兜底、维护、设备特征，以及每层什么时候起作用">
+  <title>Claude 环境防护五层</title>
+  <defs>
+    <style>
+      .t { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif; }
+      .ttl { font-size: 22px; font-weight: 700; fill: #2b2622; }
+      .n { font-size: 19px; font-weight: 700; fill: #fffdfa; }
+      .l { font-size: 15px; fill: #2b2622; }
+      .w { font-size: 14px; font-weight: 700; }
+      .row { fill: #fffdfa; stroke: #e4ddd1; stroke-width: 1.2; }
+      .c1 { fill: #a34e2a; } .c2 { fill: #c0793f; } .c3 { fill: #9c2f2f; } .c4 { fill: #5a5148; } .c5 { fill: #4a6b52; }
+      .tag { fill: #f1ede5; }
+      .wk { fill: #5a5148; }
+      .wr { fill: #9c2f2f; }
+    </style>
+  </defs>
+  <rect width="1000" height="470" fill="#fffdfa"/>
+  <text x="20" y="38" class="t ttl">防护五层：宽带那条路一直在，所以要补这五块</text>
+
+  <rect x="20" y="60" width="960" height="72" rx="12" class="row"/><path d="M32,60 H170 V132 H32 A12,12 0 0 1 20,120 V72 A12,12 0 0 1 32,60 Z" class="c1"/>
+  <text x="95" y="103" text-anchor="middle" class="t n">分路</text>
+  <text x="190" y="102" class="t l">三扇门；Claude 规则排最前；Desktop 固定走自己的门</text>
+  <rect x="820" y="82" width="142" height="28" rx="14" class="tag"/><text x="891" y="101" text-anchor="middle" class="t w wk">Clash 开着</text>
+
+  <rect x="20" y="140" width="960" height="72" rx="12" class="row"/><path d="M32,140 H170 V212 H32 A12,12 0 0 1 20,200 V152 A12,12 0 0 1 32,140 Z" class="c2"/>
+  <text x="95" y="183" text-anchor="middle" class="t n">防漏</text>
+  <text x="190" y="182" class="t l">问路只问自己人（DNS）；堵 WebRTC；IPv6 三层关</text>
+  <rect x="820" y="162" width="142" height="28" rx="14" class="tag"/><text x="891" y="181" text-anchor="middle" class="t w wk">Clash 开着</text>
+
+  <rect x="20" y="220" width="960" height="72" rx="12" class="row"/><path d="M32,220 H170 V292 H32 A12,12 0 0 1 20,280 V232 A12,12 0 0 1 32,220 Z" class="c3"/>
+  <text x="95" y="263" text-anchor="middle" class="t n">兜底</text>
+  <text x="190" y="262" class="t l">工牌保安（WFP）：名单内的程序只断网；大门黑名单（防火墙）：拦 Anthropic 网段</text>
+  <rect x="820" y="242" width="142" height="28" rx="14" class="tag"/><text x="891" y="261" text-anchor="middle" class="t w wr">Clash 不在</text>
+
+  <rect x="20" y="300" width="960" height="72" rx="12" class="row"/><path d="M32,300 H170 V372 H32 A12,12 0 0 1 20,360 V312 A12,12 0 0 1 32,300 Z" class="c4"/>
+  <text x="95" y="343" text-anchor="middle" class="t n">维护</text>
+  <text x="190" y="342" class="t l">更新后保安还认得人：三端更新一个入口；官方域名定期复核</text>
+  <rect x="820" y="322" width="142" height="28" rx="14" class="tag"/><text x="891" y="341" text-anchor="middle" class="t w wk">每次更新</text>
+
+  <rect x="20" y="380" width="960" height="72" rx="12" class="row"/><path d="M32,380 H170 V452 H32 A12,12 0 0 1 20,440 V392 A12,12 0 0 1 32,380 Z" class="c5"/>
+  <text x="95" y="423" text-anchor="middle" class="t n">设备特征</text>
+  <text x="190" y="422" class="t l">语言、时区和出口对得上；定位手动关</text>
+  <rect x="820" y="402" width="142" height="28" rx="14" class="tag"/><text x="891" y="421" text-anchor="middle" class="t w wk">一直</text>
+</svg>

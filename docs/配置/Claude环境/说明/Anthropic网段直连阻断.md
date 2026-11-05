@@ -12,11 +12,11 @@
 | 首次安装或复核 | 以管理员身份运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install` |
 | 日常总检 | `pwsh -File docs/配置/Claude环境/Claude环境一键总检.ps1`，查看「Anthropic 网段直连阻断」一项 |
 
-**找不到 `pwsh` 时**：管理员窗口可能打开的是旧版 Windows PowerShell，且 PATH 里没有 PowerShell 7（2026-11-05 实见）；改写完整路径 `& "C:\Program Files\PowerShell\pwsh.exe" -File <脚本路径> -Action Install`，开头的 `&` 要保留。
+**找不到 `pwsh` 时**：管理员窗口可能打开的是旧版 Windows PowerShell，且 PATH 里没有 PowerShell 7（2026-11-05 实见）；改写完整路径 `& "C:\Program Files\PowerShell\7\pwsh.exe" -File <脚本路径> -Action Install`，开头的 `&` 要保留。
 
 **规则标识**：`Claude-Anthropic-Direct-Block-160.79.104.0-23`、`Claude-Anthropic-Direct-Block-153.61.224.0-22`；覆盖所有程序、端口和 Windows 网络配置文件。已存在且正确的规则会跳过，只补缺的；遇到同名但配置不符的规则会停止，不会覆盖现有规则。
 
-**环境卫士**：卫士的 S7 只核对 `160.79.104.0/23` 这一条，`153.61.224.0/22` 由一键总检核对（卫士「深度总检」调的就是它）。
+**环境卫士**：卫士 v2.6.3 起 S7 核对两个网段；更早的版本只核对 `160.79.104.0/23`，另一个由一键总检核对。
 
 ## 覆盖边界
 

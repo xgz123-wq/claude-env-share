@@ -65,9 +65,13 @@ function Test-ProxyExit {
   } else {
     $arguments += @('--proxy', "http://127.0.0.1:$Port")
   }
-  $arguments += 'https://api.ipify.org'
-  $body = (& curl.exe @arguments 2>$null | Out-String).Trim()
-  [pscustomobject]@{Succeeded=($LASTEXITCODE -eq 0 -and $body -match '^\d{1,3}(\.\d{1,3}){3}$');IP=$body}
+  # 取 Claude 自己的 trace，而不是第三方测 IP 站：通用入口按规则分流，只有访问 Claude 域名才走 ACCOUNT-US，测别的站测到的是兜底组（Proxy）。
+  $arguments += 'https://claude.ai/cdn-cgi/trace'
+  $body = (& curl.exe @arguments 2>$null | Out-String)
+  $exitCode = $LASTEXITCODE
+  $ip = if ($body -match '(?m)^ip=(\S+)') { $Matches[1] } else { '' }
+  $loc = if ($body -match '(?m)^loc=(\S+)') { $Matches[1] } else { '' }
+  [pscustomobject]@{Succeeded=($exitCode -eq 0 -and [bool]$ip);IP=$ip;Loc=$loc}
 }
 
 function Test-GuardRecord {
@@ -133,6 +137,12 @@ if ($Scope -eq 'All') {
         Add-Result PASS 'Rule / TUN / Claude 规则' "基础验证 $baseCount/$baseCount；Clash 配置语法通过"
         Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
         Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；$portBrowser 出口：$($baseResult.SocksPublicIp)"
+        # 改了 JS 没重载、现场脚本没更新，都不影响现在的分流，所以只提醒。
+        $syncNotes = @()
+        if (@($baseResult.LiveExtraRules).Count) { $syncNotes += "运行中还有 JS 已去掉的规则（$(@($baseResult.LiveExtraRules) -join '、')），在 Clash Verge 里重载后消失" }
+        if (-not $baseResult.LiveScriptInSync) { $syncNotes += '现场 Script.js 与 Clash\Clash全局账号通道.js 不一致，重载不会带上项目里的改动' }
+        if ($syncNotes.Count) { Add-Result WARN 'Clash 规则同步' ($syncNotes -join '；') }
+        else { Add-Result PASS 'Clash 规则同步' "运行中的规则与 JS 清单一致（$($baseResult.ExpectedRuleCount) 条）；现场 Script.js 一致" }
       } else {
         $detail = if (@($baseResult.FailedChecks).Count) { '失败项：' + ($baseResult.FailedChecks -join ', ') } else { '验证未通过但未给出失败项' }
         if ($baseResult.MihomoApiError) { $detail += "；内核接口：$($baseResult.MihomoApiError)" }
@@ -167,9 +177,9 @@ if ($Scope -eq 'All') {
     @{Name="Claude Desktop $portDesktop";Value=$exit67}
   )) {
     if ($entry.Value.Succeeded) {
-      Add-Result PASS $entry.Name ("出口：{0}" -f $entry.Value.IP)
+      Add-Result PASS $entry.Name ("Claude 看到的出口：{0}（{1}）" -f $entry.Value.IP, $entry.Value.Loc)
     } else {
-      Add-Result FAIL $entry.Name '专用入口无法取得有效公网 IPv4'
+      Add-Result FAIL $entry.Name '经这个入口访问 claude.ai 拿不到出口 IP'
     }
   }
   $exitIps = @($exit65.IP,$exit66.IP,$exit67.IP) | Where-Object { $_ }
@@ -177,6 +187,44 @@ if ($Scope -eq 'All') {
     Add-Result PASS 'Claude 三入口一致性' "三个入口均为 $($exitIps[0])"
   } else {
     Add-Result FAIL 'Claude 三入口一致性' ("$portCli/$portBrowser/$portDesktop：" + ($exitIps -join ' / '))
+  }
+
+  # 规则真正起作用的是通用入口。规则清单比对只能证明规则在，这里真发请求，看每类规则各一个域名实际进了哪个组。
+  $hitTool = Join-Path $PSScriptRoot 'Clash\查域名走哪条规则.ps1'
+  try {
+    $engine = (Get-Process -Id $PID).Path
+    $hits = @((& $engine -NoProfile -ExecutionPolicy Bypass -File $hitTool -Json 'downloads.claude.ai' 'http-intake.logs.us5.datadoghq.com' 'claude.site' 2>$null | Out-String) | ConvertFrom-Json)
+    $wrongGroup = @($hits | Where-Object { $_.Caught -and $_.Group -ne 'ACCOUNT-US' })
+    $notCaught = @($hits | Where-Object { -not $_.Caught })
+    $hitText = (@($hits | Where-Object Caught) | ForEach-Object { '{0} → {1},{2} → {3}' -f $_.Target, $_.Rule, $_.Payload, $_.Group }) -join '；'
+    if ($wrongGroup.Count) { Add-Result FAIL 'Claude 规则实际命中' $hitText }
+    elseif ($notCaught.Count) { Add-Result WARN 'Claude 规则实际命中' ("没抓到连接：$(($notCaught.Target) -join '、')（请求太快或连不上，不等于规则有问题）；已抓到：$hitText") }
+    else { Add-Result PASS 'Claude 规则实际命中' $hitText }
+  } catch {
+    Add-Result WARN 'Claude 规则实际命中' ('实测没跑成：' + $_.Exception.Message)
+  }
+
+  # Claude Code 的代理来自 settings.json。这个文件含明文 token，这里只取 env 里的几个字段，只报端口和有无。
+  $claudeSettings = Join-Path $env:USERPROFILE '.claude\settings.json'
+  if (-not (Test-Path -LiteralPath $claudeSettings)) {
+    Add-Result WARN 'Claude Code 代理设置' '没有 settings.json；Claude Code 没配代理时，直连防护会让它连不上'
+  } else {
+    try {
+      $codeEnv = (Get-Content -LiteralPath $claudeSettings -Raw | ConvertFrom-Json).env
+      $expectedCliProxy = "http://127.0.0.1:$portCli"
+      $settingsFail = @()
+      foreach ($name in 'HTTP_PROXY', 'HTTPS_PROXY') {
+        if ($codeEnv.$name -ne $expectedCliProxy) { $settingsFail += "$name 不是 $expectedCliProxy" }
+      }
+      foreach ($name in 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_URL') {
+        if ($codeEnv.$name) { $settingsFail += "设置了 $name，请求会发去第三方接口" }
+      }
+      if ($settingsFail.Count) { Add-Result FAIL 'Claude Code 代理设置' ($settingsFail -join '；') }
+      elseif ([string]$codeEnv.DISABLE_AUTOUPDATER -ne '1') { Add-Result WARN 'Claude Code 代理设置' "HTTP(S)_PROXY=$portCli；但 DISABLE_AUTOUPDATER 不是 1" }
+      else { Add-Result PASS 'Claude Code 代理设置' "HTTP(S)_PROXY=$portCli；没有第三方接口变量；DISABLE_AUTOUPDATER=1" }
+    } catch {
+      Add-Result FAIL 'Claude Code 代理设置' 'settings.json 读不出来'
+    }
   }
 
   # 专用浏览器按 读部署清单.ps1 里的同一条规则认（桌面上 --user-data-dir 指向 ClaudeAccountBrowsers 的快捷方式），账号名从目录里取，不在脚本里写死。
@@ -334,6 +382,11 @@ if (Test-Path -LiteralPath $guardManifest) {
       $ruleCount = $targets.Count * 2
       $signedNote = if ($signedCli.Count) { "（其中 CLI 已自更新、按 Anthropic 签名放行：$($signedCli -join '、')）" } else { '' }
       Add-Result PASS 'Claude Desktop / Code 直连防护' "Desktop=$($package.Version)；目标文件 $($validTargets.Count)/$($targets.Count)$signedNote；$ruleCount 条精确阻断规则有$evidenceType"
+      # 总检不提权，读不到 WFP 规则本身，靠的是管理员 Verify 留下的凭证；凭证太旧就提醒重做。
+      if ($verifyReady -and $verify.At) {
+        $verifyAge = ((Get-Date) - [datetime]$verify.At).Days
+        if ($verifyAge -gt 30) { Add-Result WARN '直连防护 Verify 时效' "上次管理员 Verify 是 $verifyAge 天前（超过 30 天）；不影响规则，只是证据旧了，方便时用管理员跑一次 应用直连防护管理.ps1 -Action Verify" }
+      }
     }
   } catch {
     Add-Result FAIL 'Claude Desktop / Code 直连防护' ('防护记录无法完整核验：' + $_.Exception.Message)
@@ -355,6 +408,37 @@ if ($Scope -eq 'All') {
     } catch {
       Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
     }
+  }
+
+  # 正在跑的 claude.exe 实际连到哪。直连防护只认精确路径，而 Desktop 自带的 Code 标签页程序路径带版本和哈希、由 Desktop 自己下载更新，进不了名单；
+  # 它靠专用入口、TUN 和网段阻断兜底，所以用实际连接当证据（边界见 说明\架构讲解.html）。只读进程路径和连接。
+  try {
+    $registeredPaths = if (Test-Path -LiteralPath $guardManifest) { @((Get-Content -LiteralPath $guardManifest -Raw | ConvertFrom-Json).Targets.Path) } else { @() }
+    $codeTabRoot = Join-Path $env:APPDATA 'Claude\claude-code\'
+    $established = @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue | Where-Object { $_.RemoteAddress -notin @('127.0.0.1', '::1') })
+    $claudeProcesses = @(Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object Path | ForEach-Object {
+      $processId = $_.Id
+      [pscustomobject]@{
+        Path     = $_.Path
+        Kind     = if ($_.Path -in $registeredPaths) { '名单内' } elseif ($_.Path.StartsWith($codeTabRoot, [StringComparison]::OrdinalIgnoreCase)) { 'Code 标签页' } else { '未登记' }
+        External = @($established | Where-Object OwningProcess -eq $processId).Count
+      }
+    })
+    $listedDirect = @($claudeProcesses | Where-Object { $_.Kind -eq '名单内' -and $_.External -gt 0 })
+    $otherDirect = @($claudeProcesses | Where-Object { $_.Kind -ne '名单内' -and $_.External -gt 0 })
+    $unregistered = @($claudeProcesses | Where-Object Kind -eq '未登记' | ForEach-Object Path | Select-Object -Unique)
+    $kindSummary = (@($claudeProcesses | Group-Object Kind) | ForEach-Object { '{0} {1}' -f $_.Name, $_.Count }) -join '，'
+    if (-not $claudeProcesses.Count) { Add-Result PASS 'Claude 程序实际连接' '当前没有 Claude 程序在运行' }
+    elseif ($listedDirect.Count) { Add-Result FAIL 'Claude 程序实际连接' ("名单内的程序有直连外网，直连防护可能没生效：" + (($listedDirect.Path | Select-Object -Unique) -join '、')) }
+    elseif ($otherDirect.Count -or $unregistered.Count) {
+      $notes = @()
+      if ($otherDirect.Count) { $notes += "有直连外网：$(($otherDirect.Path | Select-Object -Unique) -join '、')" }
+      if ($unregistered.Count) { $notes += "不在防护名单：$($unregistered -join '、')" }
+      Add-Result WARN 'Claude 程序实际连接' ($notes -join '；')
+    }
+    else { Add-Result PASS 'Claude 程序实际连接' "运行中 $($claudeProcesses.Count) 个（$kindSummary）；全部只连本机代理，外连 0 条" }
+  } catch {
+    Add-Result WARN 'Claude 程序实际连接' ('没查成：' + $_.Exception.Message)
   }
 
   # hosts 里写死 Claude 域名会绕过 Clash 的 Claude 规则和 DNS 分流；环境卫士不查这一项。

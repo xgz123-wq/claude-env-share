@@ -2,10 +2,10 @@
 <#
 只读检查：抓 Anthropic 官方两份网络要求（Markdown 版），提取域名，与本机 Claude 路由清单比对。
 不读不改 Clash、不启动任何程序；只做 HTTPS GET 官方文档。运行方式：pwsh -NoProfile -File <本脚本>。
-退出码：0 全部已归类（可保持安静）；1 有未归类新域名（需模型判断）；2 抓取或解析失败、本地清单不一致、脚本自身出错（需人处理）。
-归类：已被本机 Claude 域名后缀覆盖 / 在下方共享域名清单（精确匹配）/ 未归类。
+退出码：0 全部已归类（可保持安静）；1 有未归类新域名（需模型判断）；2 抓取或解析失败、脚本自身出错（需人处理）。
+归类：已被本机 Claude 域名后缀或精确域名覆盖 / 在下方共享域名清单（精确匹配）/ 未归类。
 Dropped 列出被当作非域名丢弃的词，供人工扫一眼；文档改版导致漏提时，通常先体现在 HostCount 明显下降。
-新域名判断后：Claude 专属 → 加入 Clash全局账号通道.js 与验证脚本（由用户更新）；共享第三方 → 加入下方 $sharedHosts 并写明原因。
+新域名判断后：Claude 专属 → 只改 Clash全局账号通道.js 的规则清单（由用户重载）；共享第三方 → 加入下方 $sharedHosts 并写明原因。
 #>
 param(
   [string] $OfflineDir  # 测试用：目录内放 network-config.md、desktop.md，不联网
@@ -14,9 +14,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 try {
-  $clashDir = $PSScriptRoot
-  $routeScript = Join-Path $clashDir 'Clash全局账号通道.js'
-  $verifyScript = Join-Path $clashDir '验证Clash账号专用通道.ps1'
+  . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读Claude规则.ps1')
 
   # 共享或可选的第三方域名：官方清单里出现，但不绑定 ACCOUNT-US（原因见 DNS分层说明「Claude 域名定期复核」）。
   # 一律精确匹配，避免把同一后缀下的 Claude 专属子域误当共享。
@@ -34,12 +32,6 @@ try {
     @{ Name = 'Desktop';     File = 'desktop.md';        Url = 'https://code.claude.com/docs/en/desktop.md' }
   )
   $headingPattern = '^(#{2,3})\s+Network access requirements\s*$'
-
-  function Get-BlockItems([string] $Text, [string] $Name) {
-    $m = [regex]::Match($Text, '(?s)' + [regex]::Escape($Name) + '\s*=\s*[@\[]\(?(.*?)[\)\]]\s*[;\r\n]')
-    if (-not $m.Success) { throw "无法在脚本里定位列表 $Name" }
-    return $m.Groups[1].Value
-  }
 
   function Get-Section([string[]] $Lines, [string] $HeadingPattern) {
     for ($i = 0; $i -lt $Lines.Count; $i++) {
@@ -89,21 +81,11 @@ try {
     return $false
   }
 
-  # 本机清单：以路由脚本为准，同时核对路由脚本与验证脚本的域名清单是否一致
-  $routeText = Get-Content -LiteralPath $routeScript -Raw
-  $verifyText = Get-Content -LiteralPath $verifyScript -Raw
-  $jsDns = @([regex]::Matches((Get-BlockItems $routeText 'var accountDnsDomains'), '"\+\.([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-  $vfDns = @([regex]::Matches((Get-BlockItems $verifyText '$requiredClaudeDnsDomains'), "'\+\.([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-  $jsRules = @([regex]::Matches((Get-BlockItems $routeText 'var claudeRuleMatchers'), '"(DOMAIN[^"]*)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-  $vfRules = @([regex]::Matches((Get-BlockItems $verifyText '$requiredClaudeRules'), "'(DOMAIN[^,']*,[^,']+),ACCOUNT-US'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-  if ($jsDns.Count -eq 0 -or $jsRules.Count -eq 0) { throw '路由脚本里没有读到域名清单' }
-  # 精确入组的域名（DOMAIN,xxx）也算已覆盖，如 http-intake.logs.us5.datadoghq.com：同后缀的其他 Datadog 域名不入组。
-  $jsExact = @($jsRules | Where-Object { $_ -like 'DOMAIN,*' } | ForEach-Object { $_.Substring(7) })
-  $localMismatch = @()
-  foreach ($pair in @(@('DNS 域名', $jsDns, $vfDns), @('DOMAIN / DOMAIN-SUFFIX 规则', $jsRules, $vfRules))) {
-    $diff = Compare-Object $pair[1] $pair[2]
-    if ($diff) { $localMismatch += ('路由脚本与验证脚本的{0}不一致：{1}' -f $pair[0], (($diff | ForEach-Object { $_.InputObject + $(if ($_.SideIndicator -eq '<=') { '(仅路由脚本)' } else { '(仅验证脚本)' }) }) -join ', ')) }
-  }
+  # 本机清单只有一份：Clash全局账号通道.js。
+  # 精确入组的域名也算已覆盖，如 http-intake.logs.us5.datadoghq.com：同后缀的其他 Datadog 域名不入组。
+  $claudeList = Get-ClaudeRuleList
+  $jsDns = @($claudeList.Suffixes.Value)
+  $jsExact = @($claudeList.Exact.Value)
 
   $problems = @()
   $reports = @()
@@ -131,17 +113,16 @@ try {
     }
   }
 
-  $status = if ($problems -or $localMismatch) { 'attention' } elseif ($unclassified) { 'new-hosts' } else { 'ok' }
+  $status = if ($problems) { 'attention' } elseif ($unclassified) { 'new-hosts' } else { 'ok' }
   [pscustomobject]@{
-    CheckedAt     = (Get-Date -Format o)
-    Status        = $status
-    Sources       = $reports
-    Unclassified  = $unclassified
-    LocalMismatch = $localMismatch
-    Problems      = $problems
+    CheckedAt    = (Get-Date -Format o)
+    Status       = $status
+    Sources      = $reports
+    Unclassified = $unclassified
+    Problems     = $problems
   } | ConvertTo-Json -Depth 6
 
-  if ($problems -or $localMismatch) { exit 2 }
+  if ($problems) { exit 2 }
   if ($unclassified) { exit 1 }
   exit 0
 } catch {

@@ -4,97 +4,62 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
 # Clash 内核接口的管道名新版 Verge 带后缀、会变，统一从公共文件取。
 . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\Clash内核管道.ps1')
+# 规则清单只在 Clash全局账号通道.js，这里读出来和内核实际加载的比，不另抄一份。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读Claude规则.ps1')
 $portCli = Get-DeployPort 通用
 $portBrowser = Get-DeployPort 浏览器
 
 $base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $runtime = Join-Path $base 'clash-verge.yaml'
 $core = 'C:\Program Files\Clash Verge\verge-mihomo.exe'
-$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-$requiredClaudeRules = @(
-  'DOMAIN-SUFFIX,anthropic.com,ACCOUNT-US',
-  'DOMAIN-SUFFIX,claude.ai,ACCOUNT-US',
-  'DOMAIN-SUFFIX,claude.com,ACCOUNT-US',
-  'DOMAIN-SUFFIX,claude.app,ACCOUNT-US',
-  'DOMAIN-SUFFIX,clau.de,ACCOUNT-US',
-  'DOMAIN-SUFFIX,claudemcpclient.com,ACCOUNT-US',
-  'DOMAIN-SUFFIX,claudemcpcontent.com,ACCOUNT-US',
-  'DOMAIN-SUFFIX,claudeusercontent.com,ACCOUNT-US',
-  'DOMAIN,servd-anthropic-website.b-cdn.net,ACCOUNT-US',
-  'DOMAIN,anthropic.com.cdn.cloudflare.net,ACCOUNT-US',
-  'DOMAIN,anthropic.auth0.com,ACCOUNT-US',
-  'DOMAIN,anthropic-com.ghost.io,ACCOUNT-US',
-  'DOMAIN,http-intake.logs.us5.datadoghq.com,ACCOUNT-US',
-  'GEOSITE,anthropic,ACCOUNT-US',
-  'IP-CIDR,160.79.104.0/21,ACCOUNT-US,no-resolve',
-  'IP-CIDR,153.61.224.0/22,ACCOUNT-US,no-resolve',
-  'IP-CIDR6,2607:6bc0::/32,ACCOUNT-US,no-resolve',
-  'IP-ASN,399358,ACCOUNT-US,no-resolve'
-)
-$requiredClaudeDnsDomains = @(
-  '+.anthropic.com',
-  '+.claude.ai',
-  '+.claude.com',
-  '+.claude.app',
-  '+.clau.de',
-  '+.claudemcpclient.com',
-  '+.claudemcpcontent.com',
-  '+.claudeusercontent.com'
-)
-$forbiddenBroadTelemetryRules = @(
-  'DOMAIN-SUFFIX,sentry.io,ACCOUNT-US',
-  'DOMAIN-SUFFIX,statsigapi.net,ACCOUNT-US',
-  'DOMAIN,browser-intake-us5-datadoghq.com,ACCOUNT-US',
-  'DOMAIN-KEYWORD,datadog,ACCOUNT-US',
-  'DOMAIN-KEYWORD,sift,ACCOUNT-US',
-  'DOMAIN-SUFFIX,intercom.io,ACCOUNT-US',
-  'DOMAIN-SUFFIX,intercomcdn.com,ACCOUNT-US',
-  'DOMAIN,cdn.usefathom.com,ACCOUNT-US'
-)
-$forbiddenBroadTelemetryDnsDomains = @(
-  '+.sentry.io',
-  '+.statsigapi.net',
-  '+.datadoghq.com',
-  '+.intercom.io',
-  '+.intercomcdn.com'
-)
+$liveScript = Join-Path $base 'profiles\Script.js'
+$repoScript = Join-Path $PSScriptRoot 'Clash全局账号通道.js'
 
-function ConvertFrom-ChunkedBody {
-  param([Parameter(Mandatory)] [string] $Body)
-  $position = 0
-  $builder = [System.Text.StringBuilder]::new()
-  while ($position -lt $Body.Length) {
-    $lineEnd = $Body.IndexOf("`r`n", $position)
-    if ($lineEnd -lt 0) { break }
-    $size = [Convert]::ToInt32($Body.Substring($position, $lineEnd - $position).Split(';')[0], 16)
-    if ($size -eq 0) { break }
-    $position = $lineEnd + 2
-    [void] $builder.Append($Body.Substring($position, $size))
-    $position += $size + 2
+$claudeList = Get-ClaudeRuleList
+$group = $claudeList.Group
+$inboundPayload = ($claudeList.InboundRule -split ',')[1]
+
+# 设计决定，不是规则清单的副本：宽泛的遥测规则不许进账号组。官方只点名一个精确的 Datadog 域名，其余留在订阅自己的分流里。
+$forbiddenBroadTelemetryPayloads = @(
+  'sentry.io', 'statsigapi.net', 'browser-intake-us5-datadoghq.com', 'datadog', 'sift',
+  'intercom.io', 'intercomcdn.com', 'cdn.usefathom.com'
+)
+$forbiddenBroadTelemetryDnsDomains = @('+.sentry.io', '+.statsigapi.net', '+.datadoghq.com', '+.intercom.io', '+.intercomcdn.com')
+
+# 连不上内核时也要照样输出 JSON，让总检显示具体原因，而不是给一个空的失败项列表。
+$script:apiError = ''
+function Get-ClashData([string] $Path) {
+  try { Invoke-ClashApi $Path } catch {
+    if (-not $script:apiError) { $script:apiError = $_.Exception.Message }
+    $null
   }
-  $builder.ToString()
 }
 
-function Invoke-MihomoPipe {
-  param([string] $Method, [string] $Path)
-  $pipe = $null
-  try {
-    $pipe = [System.IO.Pipes.NamedPipeClientStream]::new('.', (Get-ClashPipeName), [System.IO.Pipes.PipeDirection]::InOut)
-    $pipe.Connect(3000)
-    $request = "$Method $Path HTTP/1.1`r`nHost: localhost`r`nConnection: close`r`nContent-Length: 0`r`n`r`n"
-    $bytes = $utf8NoBom.GetBytes($request)
-    $pipe.Write($bytes, 0, $bytes.Length)
-    $pipe.Flush()
-    $reader = [System.IO.StreamReader]::new($pipe, [System.Text.Encoding]::UTF8, $false, 4096, $true)
-    $response = $reader.ReadToEnd()
-    $parts = $response -split "`r?`n`r?`n", 2
-    $body = if ($parts.Count -gt 1) { $parts[1] } else { '' }
-    if ($parts[0] -match '(?im)^Transfer-Encoding:\s*chunked\s*$') { $body = ConvertFrom-ChunkedBody $body }
-    [pscustomobject]@{ Status = ($parts[0] -split "`r?`n")[0]; Body = $body; Error = $null }
-  } catch {
-    # 不抛出去：连不上内核时也要照样输出 JSON，让总检显示具体原因，而不是给一个空的失败项列表。
-    [pscustomobject]@{ Status = 'ERROR'; Body = ''; Error = $_.Exception.Message }
-  } finally { if ($pipe) { $pipe.Dispose() } }
+# 只取 nameserver-policy 一段：内核接口不给 DNS 策略，只能读 Verge 生成的运行配置。
+function Get-DnsPolicy([string] $Yaml) {
+  $policy = @{}
+  $inBlock = $false
+  $indent = 0
+  $key = $null
+  foreach ($line in ($Yaml -split "`r?`n")) {
+    if (-not $inBlock) {
+      if ($line -match '^(\s*)nameserver-policy:\s*$') { $inBlock = $true; $indent = $Matches[1].Length }
+      continue
+    }
+    if (-not $line.Trim()) { continue }
+    if (($line.Length - $line.TrimStart().Length) -le $indent) { break }
+    $item = $line.Trim()
+    if ($item.StartsWith('- ')) {
+      if ($key) { $policy[$key] = @($policy[$key]) + $item.Substring(2).Trim().Trim("'", '"') }
+    } elseif ($item -match '^(.+?):\s*$') {
+      $key = $Matches[1].Trim("'", '"')
+      $policy[$key] = @()
+    } elseif ($item -match '^(.+?):\s+(.+)$') {
+      $key = $Matches[1].Trim("'", '"')
+      $policy[$key] = @($Matches[2].Trim().Trim("'", '"'))
+    }
+  }
+  $policy
 }
 
 foreach ($path in @($runtime, $core)) {
@@ -104,69 +69,89 @@ foreach ($path in @($runtime, $core)) {
 $text = Get-Content -LiteralPath $runtime -Raw
 $listener65 = @(Get-NetTCPConnection -State Listen -LocalPort $portCli -ErrorAction SilentlyContinue)
 $listener66 = @(Get-NetTCPConnection -State Listen -LocalPort $portBrowser -ErrorAction SilentlyContinue)
-$accountResponse = Invoke-MihomoPipe GET '/proxies/ACCOUNT-US'
-$configResponse = Invoke-MihomoPipe GET '/configs'
-$account = if ($accountResponse.Status -match ' 200 ') { $accountResponse.Body | ConvertFrom-Json } else { $null }
-$live = if ($configResponse.Status -match ' 200 ') { $configResponse.Body | ConvertFrom-Json } else { $null }
+$account = Get-ClashData "/proxies/$group"
+$live = Get-ClashData '/configs'
+$rulesResponse = Get-ClashData '/rules'
+$liveRules = if ($rulesResponse) { @($rulesResponse.rules) } else { @() }
 $validation = @(& $core -t -d $base -f $runtime 2>&1)
 $validationExit = $LASTEXITCODE
-$socksIp = curl.exe --silent --show-error --max-time 20 --socks5-hostname 127.0.0.1:$portBrowser https://api.ipify.org
-$socksExit = $LASTEXITCODE
-# TUN 空闲后第一个 SOCKS 连接握手偏慢，单次 20 秒超时会产生假失败，故重试一次。
+
+# 取 Claude 自己的 trace，一次同时证明能到 claude.ai、拿到 Claude 看到的出口 IP。TUN 空闲后第一个 SOCKS 连接握手偏慢，单次 20 秒超时会产生假失败，故重试一次。
+$socksIp = ''
+$claudeStatus = '000'
 for ($attempt = 1; $attempt -le 2; $attempt++) {
-  $claudeStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --socks5-hostname 127.0.0.1:$portBrowser https://claude.ai/
+  $trace = (curl.exe --silent --show-error --max-time 20 --write-out 'http=%{http_code}' --socks5-hostname 127.0.0.1:$portBrowser https://claude.ai/cdn-cgi/trace 2>$null | Out-String)
   $claudeExit = $LASTEXITCODE
+  if ($trace -match '(?m)^ip=(\S+)') { $socksIp = $Matches[1] }
+  if ($trace -match 'http=(\d+)') { $claudeStatus = $Matches[1] }
   if ($claudeExit -eq 0 -and $claudeStatus -ne '000') { break }
   if ($attempt -eq 1) { Start-Sleep -Seconds 3 }
 }
 $feishuStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --noproxy '*' https://www.feishu.cn/
 $feishuExit = $LASTEXITCODE
 $proxyEnabled = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -Name ProxyEnable -ErrorAction SilentlyContinue).ProxyEnable
-$missingClaudeRules = @($requiredClaudeRules | Where-Object { $text -notmatch ('(?m)^- ' + [regex]::Escape($_) + '$') })
-$missingClaudeDnsPolicies = @($requiredClaudeDnsDomains | Where-Object {
-  $text -notmatch ('(?m)^\s*' + [regex]::Escape($_) + ':\s*$')
+
+# 规则：和内核实际加载的比（文件改了但没重载，这里能查出来）。按 payload + 目标组比，类型名随内核版本会变。
+$liveKeys = @{}
+for ($i = 0; $i -lt $liveRules.Count; $i++) {
+  $key = '{0}|{1}' -f $liveRules[$i].payload, $liveRules[$i].proxy
+  if (-not $liveKeys.ContainsKey($key)) { $liveKeys[$key] = $i }
+}
+$missingClaudeRules = @($claudeList.Rules | Where-Object { -not $liveKeys.ContainsKey(('{0}|{1}' -f ($_ -split ',')[1], $group)) })
+# 顺序：规则从上往下命中即停，清单里最后一条之前不许夹别的组，否则会抢走 Claude 流量。
+$managedIndexes = @($claudeList.Payloads + $inboundPayload | ForEach-Object { $liveKeys["$_|$group"] } | Where-Object { $null -ne $_ })
+$claudeRulesFirst = $false
+if ($managedIndexes.Count -gt 0) {
+  $lastManaged = ($managedIndexes | Measure-Object -Maximum).Maximum
+  $claudeRulesFirst = -not @($liveRules[0..$lastManaged] | Where-Object { $_.proxy -ne $group }).Count
+}
+# 特征和 JS 的 isClaudeRule 同一个：只看匹配内容不看组名；组合规则（AND / OR / NOT）JS 不动，这里也不查。
+$legacyClaudeBindings = @($liveRules | Where-Object {
+  $_.type -notin @('AND', 'OR', 'NOT', 'Match') -and $_.payload -match $claudeList.IdentityPattern -and $_.proxy -ne $group
+} | ForEach-Object { '{0},{1},{2}' -f $_.type, $_.payload, $_.proxy })
+# 运行中进了账号组、但 JS 清单已经没有的：只提醒，重载 Clash 后消失。
+$liveExtraRules = @($liveRules | Where-Object {
+  $_.proxy -eq $group -and $_.payload -ne $inboundPayload -and $_.payload -notin $claudeList.Payloads
+} | ForEach-Object { '{0},{1}' -f $_.type, $_.payload })
+$broadTelemetryRulesAbsent = -not @($liveRules | Where-Object { $_.proxy -eq $group -and $_.payload -in $forbiddenBroadTelemetryPayloads }).Count
+
+# DNS：Claude 后缀的每个解析器都要绑定账号组；只有绑定了账号组的遥测域名才算违规，订阅自己写的不管。
+$dnsPolicy = Get-DnsPolicy $text
+$missingClaudeDnsPolicies = @($claudeList.DnsDomains | Where-Object {
+  $servers = @($dnsPolicy[$_])
+  $servers.Count -eq 0 -or @($servers | Where-Object { -not $_.EndsWith("#$group") }).Count -gt 0
 })
-$claudeDnsUsesAccountUS =
-  ($missingClaudeDnsPolicies.Count -eq 0) -and
-  ($text -match '(?m)^\s*- https://1\.1\.1\.1/dns-query#ACCOUNT-US\s*$') -and
-  ($text -match '(?m)^\s*- https://8\.8\.8\.8/dns-query#ACCOUNT-US\s*$')
-$broadTelemetryRulesAbsent = -not @($forbiddenBroadTelemetryRules | Where-Object {
-  $text -match ('(?m)^- ' + [regex]::Escape($_) + '$')
-}).Count
 $broadTelemetryDnsPoliciesAbsent = -not @($forbiddenBroadTelemetryDnsDomains | Where-Object {
-  $text -match ('(?m)^\s*' + [regex]::Escape($_) + ':\s*$')
+  @($dnsPolicy[$_] | Where-Object { $_ -and $_.Contains("#$group") }).Count -gt 0
 }).Count
-# 只看真正的 Claude / Anthropic 标识；遥测类域名（sentry / statsig / datadog / intercom 等）
-# 按设计允许留在订阅自己的分流里，不由本项判定（唯一例外是官方清单点名的 http-intake 精确域名，已入组）。
-$legacyClaudeBindings = @($text -split "`r?`n" | Where-Object {
-  $_ -match '^-(?: DOMAIN| IP-| DOMAIN-KEYWORD| GEOSITE)' -and
-  $_ -match '(?i)(anthropic|claude|160\.79\.104|153\.61\.224|2607:6bc0|399358)' -and
-  $_ -notmatch ',ACCOUNT-US(?:,|$)'
-})
 # DNS 绑定后缀只允许 ACCOUNT-US；出现其它组名即视为残留的订阅组耦合。
 $foreignDnsBindingGroups = @([regex]::Matches($text, '#([\w\-\.]+)&disable-ipv6') |
-  ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'ACCOUNT-US' } | Select-Object -Unique)
+  ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne $group } | Select-Object -Unique)
+$liveScriptInSync = if (Test-Path -LiteralPath $liveScript) {
+  (Get-FileHash -LiteralPath $liveScript).Hash -eq (Get-FileHash -LiteralPath $repoScript).Hash
+} else { $false }
 
 $checks = [ordered]@{
-  MihomoApiReachable = ($configResponse.Status -match ' 200 ')
+  MihomoApiReachable = ($null -ne $live)
   ModeIsRule = ($live.mode -eq 'rule')
   TunEnabled = [bool]$live.tun.enable
   SystemProxyDisabled = ($proxyEnabled -eq 0)
   MixedPort43865Listening = ($listener65.Count -gt 0)
   AccountPort43866Listening = ($listener66.Count -gt 0)
   SameMihomoPid = ($listener65.Count -gt 0 -and $listener66.Count -gt 0 -and $listener65[0].OwningProcess -eq $listener66[0].OwningProcess)
-  AccountGroupExactlyOnce = (([regex]::Matches($text, '(?m)^- name: ACCOUNT-US$')).Count -eq 1)
-  AccountListenerExactlyOnce = (([regex]::Matches($text, '(?m)^- name: account-us-socks$')).Count -eq 1)
-  AccountRuleExactlyOnce = (([regex]::Matches($text, '(?m)^- IN-NAME,account-us-socks,ACCOUNT-US$')).Count -eq 1)
-  ClaudeRulesUseAccountUS = ($missingClaudeRules.Count -eq 0)
-  NoClaudeRulesBoundToOtherGroups = ($legacyClaudeBindings.Count -eq 0)
+  AccountGroupExactlyOnce = (([regex]::Matches($text, ('(?m)^- name: ' + [regex]::Escape($group) + '$'))).Count -eq 1)
+  AccountListenerExactlyOnce = (([regex]::Matches($text, ('(?m)^- name: ' + [regex]::Escape($inboundPayload) + '$'))).Count -eq 1)
+  AccountRuleExactlyOnce = (@($liveRules | Where-Object { $_.payload -eq $inboundPayload -and $_.proxy -eq $group }).Count -eq 1)
+  ClaudeRulesUseAccountUS = ($liveRules.Count -gt 0 -and $missingClaudeRules.Count -eq 0)
+  ClaudeRulesBeforeGeneralRules = $claudeRulesFirst
+  NoClaudeRulesBoundToOtherGroups = ($liveRules.Count -gt 0 -and $legacyClaudeBindings.Count -eq 0)
   NoDnsBoundToOtherGroups = ($foreignDnsBindingGroups.Count -eq 0)
-  ClaudeDnsUsesAccountUS = $claudeDnsUsesAccountUS
+  ClaudeDnsUsesAccountUS = ($missingClaudeDnsPolicies.Count -eq 0)
   NoBroadTelemetryRulesInAccountUS = $broadTelemetryRulesAbsent
   NoBroadTelemetryDnsInAccountUS = $broadTelemetryDnsPoliciesAbsent
   AccountNodeSelected = ($null -ne $account -and -not [string]::IsNullOrWhiteSpace($account.now))
   MihomoConfigValid = ($validationExit -eq 0)
-  SocksHasPublicIpv4 = ($socksExit -eq 0 -and $socksIp -match '^\d{1,3}(\.\d{1,3}){3}$')
+  SocksHasPublicIp = ($socksIp -match '^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F:]+)$')
   ClaudeReachableThroughSocks = ($claudeExit -eq 0 -and $claudeStatus -ne '000')
   FeishuReachable = ($feishuExit -eq 0 -and $feishuStatus -match '^[23]')
 }
@@ -179,13 +164,16 @@ $result = [pscustomobject]@{
   MissingClaudeRules = $missingClaudeRules
   MissingClaudeDnsPolicies = $missingClaudeDnsPolicies
   LegacyClaudeBindings = $legacyClaudeBindings
+  LiveExtraRules = $liveExtraRules
+  LiveScriptInSync = $liveScriptInSync
+  ExpectedRuleCount = $claudeList.Rules.Count
   SocksPublicIp = $socksIp
   ClaudeHttpStatus = $claudeStatus
   FeishuHttpStatus = $feishuStatus
   CorePid = @($listener66.OwningProcess | Select-Object -Unique)
   Validation = $validation[-1]
   MihomoPipe = $script:clashPipeNameCache
-  MihomoApiError = if ($configResponse.Error) { $configResponse.Error } elseif ($accountResponse.Error) { $accountResponse.Error } else { '' }
+  MihomoApiError = $script:apiError
 }
 $result | ConvertTo-Json -Depth 6
 if ($failed.Count -gt 0) { exit 1 }
