@@ -6,13 +6,19 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ruleName = 'Claude-Anthropic-Direct-Block-160.79.104.0-23'
-$cidr = '160.79.104.0/23'
+# 官方接收连接的 IPv4 网段（https://platform.claude.com/docs/en/api/ip-addresses）；每个网段一条规则。
+$ranges = @(
+  [pscustomobject]@{ RuleName = 'Claude-Anthropic-Direct-Block-160.79.104.0-23'; Cidr = '160.79.104.0/23'; Mask = '160.79.104.0/255.255.254.0' }
+  [pscustomobject]@{ RuleName = 'Claude-Anthropic-Direct-Block-153.61.224.0-22'; Cidr = '153.61.224.0/22'; Mask = '153.61.224.0/255.255.252.0' }
+)
+$ruleNames = ($ranges.RuleName -join '、')
+$cidrs = ($ranges.Cidr -join '、')
 
 function Test-Rule {
+  param([Parameter(Mandatory)] $Range)
   $problems = [System.Collections.Generic.List[string]]::new()
-  $active = @(Get-NetFirewallRule -Name $ruleName -PolicyStore ActiveStore -ErrorAction SilentlyContinue)
-  $stored = @(Get-NetFirewallRule -Name $ruleName -PolicyStore PersistentStore -ErrorAction SilentlyContinue)
+  $active = @(Get-NetFirewallRule -Name $Range.RuleName -PolicyStore ActiveStore -ErrorAction SilentlyContinue)
+  $stored = @(Get-NetFirewallRule -Name $Range.RuleName -PolicyStore PersistentStore -ErrorAction SilentlyContinue)
   if ($active.Count -ne 1) { $problems.Add("生效规则数量为 $($active.Count)，应为 1") }
   if ($stored.Count -ne 1) { $problems.Add("持久规则数量为 $($stored.Count)，应为 1") }
   if ($active.Count -eq 1) {
@@ -25,7 +31,7 @@ function Test-Rule {
       $problems.Add('规则未在全部网络配置文件中启用出站阻断')
     }
     if (@($address.RemoteAddress).Count -ne 1 -or
-        [string]$address.RemoteAddress -notin @($cidr,'160.79.104.0/255.255.254.0') -or
+        [string]$address.RemoteAddress -notin @($Range.Cidr, $Range.Mask) -or
         [string]$address.LocalAddress -ne 'Any') {
       $problems.Add('目标网段或本地地址范围不符')
     }
@@ -36,29 +42,39 @@ function Test-Rule {
   }
   [pscustomobject]@{
     Succeeded = ($problems.Count -eq 0)
-    RuleName = $ruleName
-    RemoteAddress = $cidr
-    Evidence = if ($problems.Count) { $problems -join '；' } else { '持久生效；全部程序、端口和网络配置文件；出站阻断 160.79.104.0/23' }
+    Evidence = "$($Range.Cidr)：" + ($problems -join '；')
+  }
+}
+
+function Test-AllRules {
+  $results = @($ranges | ForEach-Object { Test-Rule $_ })
+  $failed = @($results | Where-Object { -not $_.Succeeded })
+  [pscustomobject]@{
+    Succeeded = ($failed.Count -eq 0)
+    RuleName = $ruleNames
+    RemoteAddress = $cidrs
+    Evidence = if ($failed.Count) { ($failed.Evidence -join ' | ') } else { "持久生效；全部程序、端口和网络配置文件；出站阻断 $cidrs" }
   }
 }
 
 try {
   if ($Action -eq 'Install') {
-    $current = Test-Rule
-    if (-not $current.Succeeded) {
-      $existing = @(Get-NetFirewallRule -Name $ruleName -PolicyStore PersistentStore -ErrorAction SilentlyContinue)
+    foreach ($range in $ranges) {
+      $current = Test-Rule $range
+      if ($current.Succeeded) { continue }
+      $existing = @(Get-NetFirewallRule -Name $range.RuleName -PolicyStore PersistentStore -ErrorAction SilentlyContinue)
       if ($existing.Count) { throw "同名规则已存在但配置不符：$($current.Evidence)。请先人工核对，脚本不会覆盖。" }
       $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
       $principal = [Security.Principal.WindowsPrincipal]::new($identity)
       if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw '安装需要以管理员身份运行 PowerShell 7。'
       }
-      New-NetFirewallRule -Name $ruleName -DisplayName 'Claude/Anthropic 直连阻断 160.79.104.0/23' -Description 'Block direct outbound connections to Anthropic published API/Console IPv4 range; local Clash proxy remains available.' -Direction Outbound -Action Block -RemoteAddress $cidr -Protocol Any -Profile Any -Enabled True | Out-Null
+      New-NetFirewallRule -Name $range.RuleName -DisplayName "Claude/Anthropic 直连阻断 $($range.Cidr)" -Description 'Block direct outbound connections to Anthropic published API/Console IPv4 range; local Clash proxy remains available.' -Direction Outbound -Action Block -RemoteAddress $range.Cidr -Protocol Any -Profile Any -Enabled True | Out-Null
     }
   }
-  $result = Test-Rule
+  $result = Test-AllRules
 } catch {
-  $result = [pscustomobject]@{Succeeded=$false;RuleName=$ruleName;RemoteAddress=$cidr;Evidence=$_.Exception.Message}
+  $result = [pscustomobject]@{Succeeded=$false;RuleName=$ruleNames;RemoteAddress=$cidrs;Evidence=$_.Exception.Message}
 }
 
 if ($Json) { $result | ConvertTo-Json -Compress }

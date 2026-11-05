@@ -23,7 +23,7 @@ try {
   $sharedHosts = @(
     'github.com', 'raw.githubusercontent.com', 'registry.npmjs.org', 'storage.googleapis.com',
     'formulae.brew.sh', 'googlesource.com',
-    'http-intake.logs.us5.datadoghq.com', 'browser-intake-us5-datadoghq.com',
+    'browser-intake-us5-datadoghq.com',
     'fonts.googleapis.com', 'fonts.gstatic.com',
     'cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'cdn.tailwindcss.com', 'code.jquery.com', 'unpkg.com'
   )
@@ -97,6 +97,8 @@ try {
   $jsRules = @([regex]::Matches((Get-BlockItems $routeText 'var claudeRuleMatchers'), '"(DOMAIN[^"]*)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
   $vfRules = @([regex]::Matches((Get-BlockItems $verifyText '$requiredClaudeRules'), "'(DOMAIN[^,']*,[^,']+),ACCOUNT-US'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
   if ($jsDns.Count -eq 0 -or $jsRules.Count -eq 0) { throw '路由脚本里没有读到域名清单' }
+  # 精确入组的域名（DOMAIN,xxx）也算已覆盖，如 http-intake.logs.us5.datadoghq.com：同后缀的其他 Datadog 域名不入组。
+  $jsExact = @($jsRules | Where-Object { $_ -like 'DOMAIN,*' } | ForEach-Object { $_.Substring(7) })
   $localMismatch = @()
   foreach ($pair in @(@('DNS 域名', $jsDns, $vfDns), @('DOMAIN / DOMAIN-SUFFIX 规则', $jsRules, $vfRules))) {
     $diff = Compare-Object $pair[1] $pair[2]
@@ -119,9 +121,9 @@ try {
       $parsed = Get-Hosts $section
       $hosts = $parsed.Hosts
       if ($hosts.Count -lt $minHosts) { throw "只解析出 $($hosts.Count) 个域名（下限 $minHosts），文档结构可能已变" }
-      $covered = @($hosts | Where-Object { Test-Suffix $_ $jsDns })
-      $shared = @($hosts | Where-Object { -not (Test-Suffix $_ $jsDns) -and $_ -in $sharedHosts })
-      $new = @($hosts | Where-Object { -not (Test-Suffix $_ $jsDns) -and $_ -notin $sharedHosts })
+      $covered = @($hosts | Where-Object { (Test-Suffix $_ $jsDns) -or $_ -in $jsExact })
+      $shared = @($hosts | Where-Object { $_ -notin $covered -and $_ -in $sharedHosts })
+      $new = @($hosts | Where-Object { $_ -notin $covered -and $_ -notin $sharedHosts })
       $unclassified += $new | ForEach-Object { '{0}: {1}' -f $src.Name, $_ }
       $reports += [pscustomobject]@{ Source = $src.Name; Url = $src.Url; HostCount = $hosts.Count; Covered = $covered.Count; Shared = $shared.Count; Unclassified = $new; Dropped = $parsed.Dropped }
     } catch {

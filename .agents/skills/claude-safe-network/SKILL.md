@@ -14,7 +14,7 @@ description: Claude Code / Claude Desktop 安全出口链路的核对、验收�
 1. **配置主体是 Clash Verge Rev 的全局扩展脚本** `Script.js`（权威副本 `docs/配置/Claude环境/Clash/Clash全局账号通道.js`），跟订阅解耦，换订阅自动适配。
 2. **三个端口三条腿**：`43865` Claude Code（HTTP）、`43866` 专用 Chrome（SOCKS5）、`43867` Claude Desktop（HTTP），必须汇到同一个出口 IP。
 3. **只代理 Claude，不做全局代理**：TUN + 规则分流，系统代理关闭。
-4. **兜底四层**：置顶规则兜「走错组」、TUN strict-route + 53 劫持兜「DNS 旁路」、WFP 精确阻断兜「Claude 程序绕开代理直连」、防火墙网段阻断兜「任何程序直连 `160.79.104.0/23`」。
+4. **兜底四层**：置顶规则兜「走错组」、TUN strict-route + 53 劫持兜「DNS 旁路」、WFP 精确阻断兜「Claude 程序绕开代理直连」、防火墙网段阻断兜「任何程序直连 `160.79.104.0/23`、`153.61.224.0/22`」。
 5. **日常检查用环境卫士**（`D:\Tools\ClaudeEnvGuard`，30 项）；卫士查不到的 Clash 内部项由一键总检补齐（卫士「深度总检」调的就是它）。
 
 ```
@@ -22,7 +22,7 @@ Claude Code ──HTTP──┐
 专用 Chrome ─SOCKS5─┼──► Clash Verge Rev ──► ACCOUNT-US 代理组 ──► 美国住宅出口
 Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)
    43865 / 43866 / 43867          │
-                                  ├─ 置顶规则：Claude/Anthropic 域名 + IP-ASN 399358
+                                  ├─ 置顶规则：Claude/Anthropic 域名 + GEOSITE,anthropic + IP 段 + IP-ASN 399358
                                   ├─ DNS：Claude 专属域名走 DoH over ACCOUNT-US
                                   ├─ TUN：strict-route + dns-hijack(any:53)
                                   └─ WFP：8 条精确阻断（4 个 claude.exe × V4/V6）
@@ -69,9 +69,9 @@ Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)
 | 坑 | 错误做法 | 正确做法 |
 |---|---|---|
 | **注册表** | 去查 `HKLM\SOFTWARE\Policies\Anthropic\Claude` | 真实路径是 `HKLM\SOFTWARE\Policies\Claude`（没有 `Anthropic` 层） |
-| **防火墙** | 把两个直连阻断机制混为一谈 | Claude 程序的 WFP 精确过滤器不在 `Get-NetFirewallRule` 里；`160.79.104.0/23` 的系统出站规则在防火墙规则表里，用 `Anthropic网段直连阻断.ps1` 核对 |
+| **防火墙** | 把两个直连阻断机制混为一谈 | Claude 程序的 WFP 精确过滤器不在 `Get-NetFirewallRule` 里；`160.79.104.0/23`、`153.61.224.0/22` 的系统出站规则在防火墙规则表里，用 `Anthropic网段直连阻断.ps1` 核对 |
 | **运行脚本** | 用 Windows PowerShell 5.1 跑 | 必须 pwsh 7：脚本是无 BOM UTF-8，5.1 按 GBK 读会整片解析失败；5.1 与 7 共存不是冲突，不要卸载 5.1 |
-| **网段** | 以为 `/21` 和 `/23` 有一个写错 | Clash 用 `160.79.104.0/21` 分流，防火墙用 `160.79.104.0/23` 阻断，是两件事 |
+| **网段** | 以为 `/21` 和 `/23` 有一个写错 | Clash 用 `160.79.104.0/21` 分流，防火墙用 `160.79.104.0/23` 阻断，是两件事；`153.61.224.0/22` 两边写法相同 |
 
 ## 参考文件
 

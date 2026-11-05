@@ -52,13 +52,21 @@
 | 核对现场规则、运行配置、验证脚本有没有遗漏或漂移 | 模型（只读） | 结论与建议写给用户 |
 | 真实浏览器网页验收、Desktop 内置浏览器验收 | 用户 | 未观察到的访问只记为规则覆盖，不记为实测通过 |
 
-**归类规则**：被 `Clash全局账号通道.js` 里 Claude 域名后缀覆盖的记为已覆盖，如 `platform.claude.com`、`downloads.claude.ai`、`bridge.claudeusercontent.com`；在 `$sharedHosts` 里的记为共享，如 npm、GitHub、Google Storage、Datadog、字体与脚本 CDN；其余都是未归类。共享域名不全局绑定 `ACCOUNT-US`。
+**归类规则**：被 `Clash全局账号通道.js` 里 Claude 域名后缀或精确域名规则覆盖的记为已覆盖，如 `platform.claude.com`、`downloads.claude.ai`、`bridge.claudeusercontent.com`、`http-intake.logs.us5.datadoghq.com`；在 `$sharedHosts` 里的记为共享，如 npm、GitHub、Google Storage、`browser-intake-us5-datadoghq.com`、字体与脚本 CDN；其余都是未归类。共享域名不全局绑定 `ACCOUNT-US`。
 
 **运行**：`pwsh -NoProfile -File docs\配置\Claude环境\Clash\检查Claude官方域名.ps1`，输出 JSON；`-OfflineDir <目录>` 可用已下载的 `network-config.md`、`desktop.md` 离线测试。
 
 **新增域名后**：由用户更新；模型只读核对 `Script.js`、Claude 专用 DNS policy、通道验证脚本和运行配置是否都带上新规则、顺序是否在宽泛规则之前，有真实连接证据时再看脱敏的 Mihomo 目标域名、入站、规则、组和出口。
 
 **规则来源**：Anthropic Desktop 网络要求列出 `claude.app` 及动态子域，因此本分享版的规则模板包含 `DOMAIN-SUFFIX,claude.app` 与 `+.claude.app`；部署后的实际访问和出口要在使用者机器上验证。CLI 官方清单未把它列为独立的 CLI 必需域名。
+
+**2026-11-05 范围**：置顶规则增加三项，都不加 DNS policy（规则按域名或 IP 直接命中，不需要先解析）。
+
+| 规则 | 原因 | 边界 |
+|---|---|---|
+| `DOMAIN,http-intake.logs.us5.datadoghq.com` | 官方清单点名的 Datadog 接收地址 | 只写完整域名；`keyword:datadog`、`+.datadoghq.com`、`browser-intake-us5-datadoghq.com` 仍不入组，验证脚本继续禁止 |
+| `GEOSITE,anthropic` | 补上后缀规则之外的 Anthropic 域名，如 `claude.site`、`claude.dev` | 内容随 geosite 每日更新，不归本项目控制；原有后缀规则保留 |
+| `IP-CIDR,153.61.224.0/22` | 官方 IP 文档新列的接收网段；本地 ASN 库查不到它，`IP-ASN` 兜不住 | 只影响直接连 IP 的流量，走域名的连接先命中域名规则 |
 
 ## 文件与阅读入口
 

@@ -35,12 +35,15 @@ function main(config, profileName) {
     "DOMAIN,servd-anthropic-website.b-cdn.net",
     "DOMAIN,anthropic.com.cdn.cloudflare.net",
     "DOMAIN,anthropic.auth0.com",
-    "DOMAIN,anthropic-com.ghost.io"
+    "DOMAIN,anthropic-com.ghost.io",
+    "DOMAIN,http-intake.logs.us5.datadoghq.com",
+    "GEOSITE,anthropic"
   ];
   var claudeRules = claudeRuleMatchers.map(function (matcher) {
     return matcher + "," + groupName;
   }).concat([
     "IP-CIDR,160.79.104.0/21," + groupName + ",no-resolve",
+    "IP-CIDR,153.61.224.0/22," + groupName + ",no-resolve",
     "IP-CIDR6,2607:6bc0::/32," + groupName + ",no-resolve",
     "IP-ASN,399358," + groupName + ",no-resolve"
   ]);
@@ -84,6 +87,7 @@ function main(config, profileName) {
       return true;
     }
     if (rule.indexOf("IP-CIDR,160.79.104.0/21,") === 0 ||
+        rule.indexOf("IP-CIDR,153.61.224.0/22,") === 0 ||
         rule.indexOf("IP-CIDR6,2607:6bc0::/32,") === 0 ||
         rule.indexOf("IP-ASN,399358,") === 0) {
       return true;

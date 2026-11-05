@@ -24,7 +24,10 @@ $requiredClaudeRules = @(
   'DOMAIN,anthropic.com.cdn.cloudflare.net,ACCOUNT-US',
   'DOMAIN,anthropic.auth0.com,ACCOUNT-US',
   'DOMAIN,anthropic-com.ghost.io,ACCOUNT-US',
+  'DOMAIN,http-intake.logs.us5.datadoghq.com,ACCOUNT-US',
+  'GEOSITE,anthropic,ACCOUNT-US',
   'IP-CIDR,160.79.104.0/21,ACCOUNT-US,no-resolve',
+  'IP-CIDR,153.61.224.0/22,ACCOUNT-US,no-resolve',
   'IP-CIDR6,2607:6bc0::/32,ACCOUNT-US,no-resolve',
   'IP-ASN,399358,ACCOUNT-US,no-resolve'
 )
@@ -134,10 +137,10 @@ $broadTelemetryDnsPoliciesAbsent = -not @($forbiddenBroadTelemetryDnsDomains | W
   $text -match ('(?m)^\s*' + [regex]::Escape($_) + ':\s*$')
 }).Count
 # 只看真正的 Claude / Anthropic 标识；遥测类域名（sentry / statsig / datadog / intercom 等）
-# 按设计允许留在订阅自己的分流里，不由本项判定。
+# 按设计允许留在订阅自己的分流里，不由本项判定（唯一例外是官方清单点名的 http-intake 精确域名，已入组）。
 $legacyClaudeBindings = @($text -split "`r?`n" | Where-Object {
-  $_ -match '^-(?: DOMAIN| IP-| DOMAIN-KEYWORD)' -and
-  $_ -match '(?i)(anthropic|claude|160\.79\.104|2607:6bc0|399358)' -and
+  $_ -match '^-(?: DOMAIN| IP-| DOMAIN-KEYWORD| GEOSITE)' -and
+  $_ -match '(?i)(anthropic|claude|160\.79\.104|153\.61\.224|2607:6bc0|399358)' -and
   $_ -notmatch ',ACCOUNT-US(?:,|$)'
 })
 # DNS 绑定后缀只允许 ACCOUNT-US；出现其它组名即视为残留的订阅组耦合。

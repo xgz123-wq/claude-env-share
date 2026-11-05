@@ -61,7 +61,7 @@
 | `20260910-140516-共用DNS修复` | 09-10 共用 DNS 修复 | `Desktop防护/共用DNS修复状态.json` |
 
 - **WFP 直连防护**：`Desktop防护/应用直连防护管理.ps1 -Action Rollback`（管理员）。
-- **Anthropic 网段阻断**：规则名 `Claude-Anthropic-Direct-Block-160.79.104.0-23`，删规则即回滚（管理员）。
+- **Anthropic 网段阻断**：规则名 `Claude-Anthropic-Direct-Block-160.79.104.0-23`、`Claude-Anthropic-Direct-Block-153.61.224.0-22`，删规则即回滚（管理员）。
 - **PS7 右键入口**：`pwsh -File docs/配置/Claude环境/工具/启用-PowerShell7入口.ps1 -Rollback`（只写 HKCU）。
 - **本仓库脚本与文档**：每次维护前的备份在 `%LOCALAPPDATA%\ClaudeNetworkGuard\<任务名>-<时间>\`。
 
