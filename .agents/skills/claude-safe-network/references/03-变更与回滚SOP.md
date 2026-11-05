@@ -59,7 +59,7 @@
 | 备份目录 | 对应操作 | 状态记录 |
 |---|---|---|
 | `20260910-121858-ClaudeDesktop专用入口` | 09-10 Desktop 专用通道建立 | `Desktop防护/安装状态.json` |
-| `20260910-140516-共用DNS修复` | 09-10 共用 DNS 修复 | `Desktop防护/共用DNS修复状态.json` |
+| `20260910-140516-共用DNS修复` | 09-10 共用 DNS 修复 | 无（一次性脚本和状态文件 2026-11-05 已移除） |
 
 - **WFP 直连防护**：`Desktop防护/应用直连防护管理.ps1 -Action Rollback`（管理员）。
 - **Anthropic 网段阻断**：规则名 `Claude-Anthropic-Direct-Block-160.79.104.0-23`、`Claude-Anthropic-Direct-Block-153.61.224.0-22`，删规则即回滚（管理员）。

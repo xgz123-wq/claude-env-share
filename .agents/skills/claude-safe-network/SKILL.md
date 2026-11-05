@@ -43,7 +43,7 @@ Claude Desktop─HTTP─┘        (mihomo)          (手工选线路)
 | 回滚 Clash 账号通道 | `pwsh -NoProfile -File docs/配置/Claude环境/工具/回滚Clash配置.ps1 -BackupDirectory <备份目录>` |
 | `.ps1` 右键「用 PowerShell 7 运行」：查看 / 加 / 撤 | `pwsh -NoProfile -File docs/配置/Claude环境/工具/启用-PowerShell7入口.ps1 [-Apply / -Rollback]` |
 
-`docs/配置/Claude环境/工具/` 里另有 `安装Clash账号专用通道.ps1`、`修复Clash全机DNS.ps1`、`更新Clash通用规则.ps1`（会重启 Clash，需 `CLAUDE_ALLOW_CLASH_RESTART=1`），都是已执行过的一次性工具，只在重建环境时由用户决定是否运行。
+`docs/配置/Claude环境/工具/` 里另有 `安装Clash账号专用通道.ps1`，是已执行过的一次性工具，只在重建环境时由用户决定是否运行。
 
 **判定**：以脚本实时输出为准，`0 FAIL`、退出码 `0` 即通过，`WARN` 逐条确认，`MANUAL` 是用户的网页人工验收。
 
