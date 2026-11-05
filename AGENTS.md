@@ -20,7 +20,7 @@
 
 | 步骤 | 做什么 | 依据 |
 |---|---|---|
-| 0 前置 | 确认 Windows 10/11、PowerShell 7、Clash Verge Rev、Chrome、Claude Code、Claude Desktop 已安装；用户已导入订阅 | `README.md`「适用条件」 |
+| 0 前置 | 确认 Windows 10/11、PowerShell 7、Clash Verge Rev、Chrome、Claude Code、Claude Desktop 已安装；用户已导入订阅；新开窗口能直接运行 `pwsh`，不能就把 `C:\Program Files\PowerShell\7` 加进用户 PATH | `README.md`「适用条件」 |
 | 0a 端口预检 | 读 `%APPDATA%\io.github.clash-verge-rev.clash-verge-rev\verge.yaml` 的 `verge_mixed_port`，不是 `43865` 就请用户在 Verge「设置 → Clash 设置 → 端口设置」里改成 `43865`，不要改脚本去迁就；再查 `43866` / `43867` 是否已被非 `verge-mihomo` 的程序监听，有就停下告诉用户。只读这一个字段，不读 `profiles.yaml` | `README.md`「端口说明」 |
 | 1 Clash | 把 `docs/配置/Claude环境/Clash/Clash全局账号通道.js` 装为 Verge 全局扩展脚本；开 TUN、关系统代理；请用户在 `ACCOUNT-US` 手选节点 | `docs/配置/Claude环境/工具/安装Clash账号专用通道.ps1`、Skill `references/01-架构与配置主体.md` |
 | 2 IPv6 与 DNS | 网卡、Clash 全局、Clash DNS 覆写三层关闭 IPv6 | `docs/配置/Claude环境/说明/DNS分层说明.md` |
