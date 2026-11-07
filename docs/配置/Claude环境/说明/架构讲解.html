@@ -735,7 +735,7 @@
 </ul></div></details>
 
 <details><summary>DNS 和 IPv6</summary><div class="dbody">
-<p>只给 Claude 的 8 个后缀换解析器，普通 DNS 不动；国内网站解析到国内地址是正常的。详见 <a href="DNS分层说明.md">DNS 分层说明</a>。</p>
+<p>Claude 的 8 个后缀用专用解析器，经 ACCOUNT-US 查；普通域名问海外 DoH，国内域名问国内 DNS；国内网站解析到国内地址是正常的。详见 <a href="DNS分层说明.md">DNS 分层说明</a>。</p>
 <div class="tw"><table>
 <tr><th>IPv6 关哪</th><th>怎么关</th></tr>
 <tr><td><b>网卡</b></td><td>网卡属性取消勾选 IPv6；新增网卡要重做</td></tr>

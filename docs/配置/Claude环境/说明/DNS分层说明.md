@@ -1,6 +1,6 @@
 # Clash DNS 分层说明
 
-> 整理日期：2026-11-05
+> 整理日期：2026-11-07
 > 用途：说明网络分工与维护边界
 > 端口：文中 43865 / 43866 / 43867 是默认值，本机以部署清单为准，见 [README「部署清单」](../README.md#部署清单)。
 
@@ -8,8 +8,22 @@
 
 - **普通应用**：国内流量按规则直连，国外流量按订阅规则分流。
 - **Claude 域名**：使用独立解析规则，连接沿既有 `ACCOUNT-US` 通道。
-- **普通 DNS**：沿用当前合并配置的通用解析器。
+- **普通 DNS**：Clash Verge 的 DNS 覆写 `dns_config.yaml` 优先于订阅；它的 `nameserver` 只放海外 DoH（`https://8.8.8.8/dns-query`、`https://1.1.1.1/dns-query`）。
+- **国内域名 DNS**：靠订阅带来的 `geosite:cn,private` 策略问国内 DNS；换订阅后要确认运行配置 `clash-verge.yaml` 里还有这条策略。
 - **判断原则**：国内网站解析到国内地址，本身不代表 DNS 泄漏。
+
+## 普通浏览器防 DNS 泄露
+
+**结论**：在 Clash 修，不在浏览器加参数；`nameserver` 不放国内 DNS。
+
+| 项目 | 做法 | 原因 |
+|---|---|---|
+| Clash `nameserver` | 不放 `doh.pub`、`dns.alidns.com` 这类国内 DNS | `GEOIP,CN,DIRECT` 没带 `no-resolve`，域名走到这条规则时 Clash 要先查一次 DNS；列表里有国内 DNS，海外域名也会问到它，`doh.pub` 实测走 `DIRECT`，检测站报泄露（2026-11-07 修复） |
+| 普通 Chrome 启动参数 | 不加专用 Chrome 的 `--host-resolver-rules` | 这个参数把浏览器本地解析全部关掉，离开 `--proxy-server` 就上不了网；系统 DNS 已由 TUN 接管 |
+| 浏览器安全 DNS | 保持关闭 | 浏览器自己解析会绕过 TUN 的 53 劫持，按域名分流的规则容易失准 |
+
+- **影响范围**：`nameserver` 是 Clash 全局设置，全机软件都生效；Claude 域名和国内域名有各自的策略，不受它影响。
+- **边界**：不在国内域名库里的小众国内网站会问海外 DNS，可能变慢或打不开。
 
 ## IPv6 三层关闭
 
