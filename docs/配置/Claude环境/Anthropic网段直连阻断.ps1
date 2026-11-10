@@ -46,14 +46,23 @@ function Test-Rule {
   }
 }
 
+# 规则在、但防火墙总开关关着，规则一条也不生效（2026-11-10 实见：三个配置文件全关，规则检查却一直 PASS）。
+function Test-FirewallOn {
+  $off = @(Get-NetFirewallProfile -PolicyStore ActiveStore | Where-Object { [string]$_.Enabled -ne 'True' } | ForEach-Object Name)
+  [pscustomobject]@{
+    Succeeded = ($off.Count -eq 0)
+    Evidence = "Windows 防火墙未开启：$($off -join '、')，阻断规则不生效；管理员 PowerShell 执行 Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True"
+  }
+}
+
 function Test-AllRules {
-  $results = @($ranges | ForEach-Object { Test-Rule $_ })
+  $results = @(@(Test-FirewallOn) + @($ranges | ForEach-Object { Test-Rule $_ }))
   $failed = @($results | Where-Object { -not $_.Succeeded })
   [pscustomobject]@{
     Succeeded = ($failed.Count -eq 0)
     RuleName = $ruleNames
     RemoteAddress = $cidrs
-    Evidence = if ($failed.Count) { ($failed.Evidence -join ' | ') } else { "持久生效；全部程序、端口和网络配置文件；出站阻断 $cidrs" }
+    Evidence = if ($failed.Count) { ($failed.Evidence -join ' | ') } else { "防火墙三个配置文件已开启；规则持久生效；全部程序、端口和网络配置文件；出站阻断 $cidrs" }
   }
 }
 

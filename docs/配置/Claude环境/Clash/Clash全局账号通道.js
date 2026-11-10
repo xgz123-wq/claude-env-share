@@ -96,6 +96,17 @@ function main(config, profileName) {
     "exclude-type": "Direct|Reject"
   });
 
+  // 全局模式也只走账号组：切到「全局」时内核不看任何规则，所有流量交给 GLOBAL 组，
+  // 内核自带的 GLOBAL 默认选 DIRECT（2026-11-10 误切全局，43865/43866 因此直连）。自定义后只剩 ACCOUNT-US 一个选项。
+  config["proxy-groups"] = config["proxy-groups"].filter(function (group) {
+    return !group || group.name !== "GLOBAL";
+  });
+  config["proxy-groups"].push({
+    name: "GLOBAL",
+    type: "select",
+    proxies: [groupName]
+  });
+
   // 只加固 Claude 链路：相关域名使用加密 DNS，且 DoH 连接明确经过 ACCOUNT-US。
   // 普通/国内 DNS 保留订阅与 Clash 的通用解析器，不绑定任何专用代理组。
   if (!config.dns || typeof config.dns !== "object") {
