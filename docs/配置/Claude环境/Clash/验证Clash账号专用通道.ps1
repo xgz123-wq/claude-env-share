@@ -143,7 +143,9 @@ $checks = [ordered]@{
   SameMihomoPid = ($listener65.Count -gt 0 -and $listener66.Count -gt 0 -and $listener65[0].OwningProcess -eq $listener66[0].OwningProcess)
   AccountGroupExactlyOnce = (([regex]::Matches($text, ('(?m)^- name: ' + [regex]::Escape($group) + '$'))).Count -eq 1)
   AccountListenerExactlyOnce = (([regex]::Matches($text, ('(?m)^- name: ' + [regex]::Escape($inboundPayload) + '$'))).Count -eq 1)
-  AccountRuleExactlyOnce = (@($liveRules | Where-Object { $_.payload -eq $inboundPayload -and $_.proxy -eq $group }).Count -eq 1)
+  # 43866 直接进账号组（listener 带 proxy），切全局、直连模式都不漏；2026-11-11 加。
+  AccountListenerPinned = ([regex]::IsMatch($text, ('(?m)^- name: ' + [regex]::Escape($inboundPayload) + '\r?\n(?:  (?!proxy:).*\r?\n)*  proxy: ' + [regex]::Escape($group) + '\r?$')))
+  AccountRuleExactlyOnce =(@($liveRules | Where-Object { $_.payload -eq $inboundPayload -and $_.proxy -eq $group }).Count -eq 1)
   ClaudeRulesUseAccountUS = ($liveRules.Count -gt 0 -and $missingClaudeRules.Count -eq 0)
   ClaudeRulesBeforeGeneralRules = $claudeRulesFirst
   NoClaudeRulesBoundToOtherGroups = ($liveRules.Count -gt 0 -and $legacyClaudeBindings.Count -eq 0)

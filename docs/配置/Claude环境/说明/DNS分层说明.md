@@ -48,12 +48,12 @@
 
 ## Claude 域名定期复核
 
-**结论**：每周以及 Desktop、CLI、浏览器、插件更新后，对照 [Anthropic Desktop 网络要求](https://code.claude.com/docs/en/desktop#network-access-requirements)和 [Claude Code 网络要求](https://code.claude.com/docs/en/network-config#network-access-requirements)复核域名；订阅、节点、Clash 规则变化或登录、下载、桥接异常时也复核。官方列表是来源，实际连接和 Mihomo 命中是现场证据。
+**结论**：后台出口巡检每天自动跑一次 `Clash/检查Claude官方域名.ps1`，有未归类新域名就弹窗（见[日常使用「后台出口巡检」](日常使用.md#后台出口巡检)）；Desktop、CLI、浏览器、插件更新后再手动对照 [Anthropic Desktop 网络要求](https://code.claude.com/docs/en/desktop#network-access-requirements)和 [Claude Code 网络要求](https://code.claude.com/docs/en/network-config#network-access-requirements)复核域名；订阅、节点、Clash 规则变化或登录、下载、桥接异常时也复核。官方列表是来源，实际连接和 Mihomo 命中是现场证据。
 
 | 入口 | 新域名如何进入 `ACCOUNT-US` | 复核重点 |
 |---|---|---|
 | CLI `43865` | 共用入口按置顶 Claude 域名规则分流 | 新域名、命中规则、DNS policy、最终策略组与出口 |
-| 专用 Chrome `43866` | 进入专用 SOCKS 的连接由置顶 `IN-NAME` 规则分流 | 实际浏览器连接是否进入 `43866`，以及网页出口、DNS、WebRTC |
+| 专用 Chrome `43866` | 专用 SOCKS listener 直接指定 `ACCOUNT-US`（2026-11-11 起，切全局、直连模式都不变），置顶 `IN-NAME` 规则保留 | 实际浏览器连接是否进入 `43866`，以及网页出口、DNS、WebRTC |
 | Desktop `43867` | 进入专用 HTTP listener 的连接指定 `ACCOUNT-US` | Desktop 与子进程的真实连接是否进入 `43867` |
 
 **分工**：官方清单比对由脚本 `Clash/检查Claude官方域名.ps1` 完成，只有脚本报出未归类新域名时才需要模型判断。

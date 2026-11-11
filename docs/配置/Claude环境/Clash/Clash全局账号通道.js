@@ -136,11 +136,14 @@ function main(config, profileName) {
   config.listeners = config.listeners.filter(function (listener) {
     return !listener || listener.name !== listenerName;
   });
+  // 专用 Chrome：和 43867 一样直接进账号组，Clash 切到全局、直连都不影响（2026-11-11 起；之前只靠 IN-NAME 规则，切直连模式会漏）。
+  // IN-NAME 规则保留，规则页和验证脚本仍按它认这个入口。
   config.listeners.unshift({
     name: listenerName,
     type: "socks",
     listen: "127.0.0.1",
     port: 43866,
+    proxy: groupName,
     udp: false
   });
 
