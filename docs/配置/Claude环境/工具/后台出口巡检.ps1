@@ -5,6 +5,7 @@
 #   出口：三个专用端口各经 claude.ai/cdn-cgi/trace 看 Claude 眼里的国家，不是预期国家（默认 US）就报警；只问 Claude 自己，不访问第三方测 IP 站。
 #   Clash 模式：直连模式，或全局模式下 GLOBAL 没选 ACCOUNT-US，报警。
 #   防火墙：调同目录上一层的 Anthropic网段直连阻断.ps1（总开关 + 两条网段规则）。
+#   全局断网开关：调 ..\Desktop防护\全局断网开关.ps1 -Action Status -Json，9 条常驻过滤不全就报警（用急救命令解除后忘了重装）。
 #   官方域名：每天一次调 Clash\检查Claude官方域名.ps1，官方清单出现没归类的新域名就报警（交给模型判断要不要加规则）。
 # 弹窗只在「失败项和上次不一样」时弹一次，不会每轮都弹；连不上 Claude、读不到 Clash 只记日志（不会直连，只是用不了）。
 # 结果和日志在 %LOCALAPPDATA%\ClaudeNetworkGuard\后台出口巡检\。
@@ -156,6 +157,15 @@ if ($SimulateFirewallOff) {
   } catch {
     Add-Item WARN '防火墙与网段阻断' ('检查没跑成：' + $_.Exception.Message)
   }
+}
+
+# 3b. 全局断网开关：Clash/TUN 不在时整机断网的兜底，不全就报警。
+try {
+  $ks = (& (Join-Path $envRoot 'Desktop防护\全局断网开关.ps1') -Action Status -Json | Out-String) | ConvertFrom-Json
+  if ($ks.Succeeded) { Add-Item PASS '全局断网开关' $ks.Evidence }
+  else { Add-Item FAIL '全局断网开关' $ks.Evidence }
+} catch {
+  Add-Item WARN '全局断网开关' ('检查没跑成：' + $_.Exception.Message)
 }
 
 # 4. 官方域名复核：每天一次（抓取失败 1 小时后重试），调 ..\Clash\检查Claude官方域名.ps1，只访问 Anthropic 官方文档。

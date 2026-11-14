@@ -22,19 +22,20 @@
 |---|---|---|
 | 0 前置 | 确认 Windows 10/11、PowerShell 7、Clash Verge Rev、Chrome、Claude Code、Claude Desktop 已安装；用户已导入订阅；新开窗口能直接运行 `pwsh`，不能就把 `C:\Program Files\PowerShell\7` 加进用户 PATH | `README.md`「适用条件」 |
 | 0a 端口预检 | 读 `%APPDATA%\io.github.clash-verge-rev.clash-verge-rev\verge.yaml` 的 `verge_mixed_port`，不是 `43865` 就请用户在 Verge「设置 → Clash 设置 → 端口设置」里改成 `43865`，不要改脚本去迁就；再查 `43866` / `43867` 是否已被非 `verge-mihomo` 的程序监听，有就停下告诉用户。只读这一个字段，不读 `profiles.yaml` | `README.md`「端口说明」 |
-| 1 Clash | 把 `docs/配置/Claude环境/Clash/Clash全局账号通道.js` 装为 Verge 全局扩展脚本；开 TUN、关系统代理；请用户在 `ACCOUNT-US` 手选节点 | `docs/配置/Claude环境/工具/安装Clash账号专用通道.ps1`、Skill `references/01-架构与配置主体.md` |
+| 1 Clash | 把 `docs/配置/Claude环境/Clash/Clash全局账号通道.js` 装为 Verge 全局扩展脚本；开 TUN、关系统代理；请用户在 `ACCOUNT-US` 手选节点 | `docs/配置/Claude环境/说明/排障与变更.md`「全局扩展脚本 `Script.js` 做的事」 |
 | 2 IPv6 与 DNS | 网卡、Clash 全局、Clash DNS 覆写三层关闭 IPv6 | `docs/配置/Claude环境/说明/排障与变更.md`「DNS 与 IPv6」 |
-| 3 Claude Code | `~/.claude/settings.json` 的 `env` 设 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 为 `http://127.0.0.1:43865`，`NO_PROXY` 为 `localhost,127.0.0.1,*.local`；只改 `env`，不动其他字段 | Skill `SKILL.md` |
+| 3 Claude Code | `~/.claude/settings.json` 的 `env` 设 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 为 `http://127.0.0.1:43865`，`NO_PROXY` 为 `localhost,127.0.0.1,*.local`；只改 `env`，不动其他字段 | `docs/配置/Claude环境/说明/排障与变更.md`「三个入口的配置位置」 |
 | 4 专用 Chrome | 每个账号建独立浏览器：`创建账号浏览器.ps1 -Alias 账号1`（别名由用户定） | `docs/配置/Claude环境/工具/创建账号浏览器.ps1`、`docs/配置/Claude环境/说明/排障与变更.md`「专用 Chrome」 |
-| 5 Desktop 通道 | `Desktop防护/专用通道管理.ps1 -Action Install`（43867 和 Desktop 本地配置）；`Claude自动更新管理.ps1 -Action Disable`（HKLM `disableAutoUpdates` 和 `egressProxyUrl`，两项同层） | `docs/配置/Claude环境/Desktop防护/更新维护说明.md` |
+| 5 Desktop 通道 | `Desktop防护/Claude自动更新管理.ps1 -Action Disable`（管理员）：在 HKLM 同一层写 `disableAutoUpdates` 和 `egressProxyUrl=http://127.0.0.1:43867`；43867 本身由第 1 步的 JS 开好 | `docs/配置/Claude环境/Desktop防护/更新维护说明.md` |
 | 6 直连防护 | 按 `应用过滤目标.示例.json` 生成本机 `应用过滤目标.json`：填本机真实路径，SHA256 审核后填写，GUID 新生成；再 `应用直连防护管理.ps1 -Action Install`（管理员） | 同上 |
-| 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23`、`153.61.224.0/22` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/排障与变更.md`「两道断网开关」 |
+| 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23`、`153.61.224.0/22` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/排障与变更.md`「三道断网开关」 |
+| 6b 全局断网开关 | 先读 `排障与变更.md`「三道断网开关」里的后果（Clash/TUN 不在时整机无外网），用户同意后以管理员运行 `pwsh -File docs/配置/Claude环境/Desktop防护/全局断网开关.ps1 -Action Install`（先临时试装对比，通过才装常驻）；再 `-Action Status` 核对 9 条；急救用 `-Action Remove` | `docs/配置/Claude环境/说明/排障与变更.md`「三道断网开关」 |
 | 7 快捷方式 | 桌面建「Claude-环境一键总检」「Claude-英文浏览器」「Claude-三端更新」，目标为 PowerShell 7 加 `-File` 指向对应 docs 脚本；再建「Claude-系统架构」，目标为 `说明/架构讲解.html`；各账号 Chrome 快捷方式第 4 步已建 | `docs/配置/Claude环境/说明/日常使用.md`「桌面入口与维护」 |
 | 8 验收 | 一键总检 0 FAIL；`docs/配置/Claude环境/工具/检查脚本完整性.ps1` 0 FAIL；用户肉眼核对检测站；把结果写进 `维护日志.md` | `docs/配置/Claude环境/Claude环境一键总检.ps1` |
 | 8a 环境卫士 | 把卫士最新版的两个 exe 下到安装目录，和分享包 clone 出来的文件夹放在一起（例如 exe 在 `D:\Tools\Claude环境\`，分享包在 `D:\Tools\Claude环境\claude-env-share\`）：`curl.exe -L --fail -o <目录>\ClaudeEnvGuard.exe https://github.com/xgz123-wq/ClaudeEnvGuard/releases/latest/download/ClaudeEnvGuard.exe`，`ceg.exe` 同理；`<目录>\ceg.exe version` 能输出版本号才算下好；再在桌面建「Claude 环境卫士」快捷方式，目标为 `<目录>\ClaudeEnvGuard.exe`、起始位置为 `<目录>`。卫士不用安装、不用填任何设置，第 9 步生成部署清单后它自己找到分享包 | 卫士 [README](https://github.com/xgz123-wq/ClaudeEnvGuard) |
 | 9 部署清单 | 最后再跑一次一键总检（顺带生成清单）：它从 Clash 运行配置读出三个端口、登记桌面上的专用浏览器，写进 `%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json`；确认三个端口与 Clash 一致、每个专用浏览器都已登记。之后改端口只在 Clash 改，再跑一次总检 | `docs/配置/Claude环境/README.md`「部署清单」 |
 
-- **分享版的已知问题**：步骤 6 之前，`工具/检查脚本完整性.ps1` 的防护状态项报 WARN；步骤 7 之前，它的桌面图标项报 WARN；步骤 6 之前，总检的直连防护项报 FAIL；步骤 6a 之前，网段阻断项报 FAIL。都属预期，做完对应步骤后消失。
+- **分享版的已知问题**：步骤 6 之前，`工具/检查脚本完整性.ps1` 的防护状态项报 WARN；步骤 7 之前，它的桌面图标项报 WARN；步骤 6 之前，总检的直连防护项报 FAIL；步骤 6a 之前，网段阻断项报 FAIL；步骤 6b 之前，总检的全局断网开关项报 FAIL。都属预期，做完对应步骤后消失。
 
 ## 推荐安装目录
 

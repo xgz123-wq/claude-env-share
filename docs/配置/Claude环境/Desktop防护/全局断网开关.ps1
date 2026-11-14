@@ -1,7 +1,7 @@
 # 全局断网开关（照经验帖第 4 条，Windows 版）：只有 Clash 内核、走 TUN 的流量、本机回环和局域网能出网，其余一律拦。
 # Clash 崩溃、被退出、TUN 掉了时整台电脑上不了外网（局域网照常），不会有任何程序用本地网络直连。
 # 用法（pwsh 7）：
-#   -Action Status    只读，看开关装没装（不用管理员）
+#   -Action Status    只读，看开关装没装（不用管理员）；加 -Json 只输出一行结果、不写日志（一键总检和后台巡检调）
 #   -Action Test      管理员。临时装上（进程退出即自动消失）→ 对比测试 → 撤掉；不改任何常驻设置
 #   -Action Install   管理员。先跑 Test，通过才装常驻版；装完再测，不通过自动卸掉
 #   -Action Remove    管理员。一键解除（断网急救用）
@@ -10,6 +10,7 @@ param(
   [ValidateSet('Status', 'Test', 'Install', 'Remove')][string] $Action = 'Status',
   [string[]] $CorePaths = @('C:\Program Files\Clash Verge\verge-mihomo.exe', 'C:\Program Files\Clash Verge\verge-mihomo-alpha.exe'),
   [string] $TunCidr = '198.18.0.0/16',
+  [switch] $Json,
   [switch] $Pause
 )
 $ErrorActionPreference = 'Stop'
@@ -107,6 +108,16 @@ function Invoke-Test {
   foreach ($k in $verdict.Keys) { Write-Log ('  判定 {0} = {1}' -f $k, $verdict[$k]) }
   Write-Log ('试装结论：' + $(if ($pass) { '通过' } else { '不通过' }))
   [pscustomobject]@{ Pass = $pass; Verdict = $verdict; Before = $before; During = $during; After = $after; Cores = $cores }
+}
+
+# 总检和巡检用：只读 9 条常驻过滤在不在，不写日志（巡检每 5 分钟跑，写日志会越积越多）。
+if ($Json -and $Action -eq 'Status') {
+  $persistent = @($ks::Status() | Where-Object { $_ -and $_.Persistent }).Count
+  $evidence = if ($persistent -eq 9) { '9 条常驻过滤都在：Clash/TUN 不在时整机无外网' }
+    elseif ($persistent -eq 0) { '没装（或被急救命令解除了）：Clash/TUN 不在时其他程序会直连；双击桌面「全局断网开关-安装.cmd」重装' }
+    else { "只剩 $persistent/9 条常驻过滤，开关不完整；双击桌面「全局断网开关-安装.cmd」重装" }
+  [pscustomobject]@{ Succeeded = ($persistent -eq 9); Installed = $persistent; Evidence = $evidence } | ConvertTo-Json -Compress
+  return
 }
 
 $result = $null

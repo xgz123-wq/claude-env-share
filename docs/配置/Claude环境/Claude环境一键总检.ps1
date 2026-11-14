@@ -224,24 +224,26 @@ if ($Scope -eq 'All') {
   }
 }
 
-if (Test-Path -LiteralPath $desktopMeta) {
+# Desktop 的代理：有策略时按策略同层的 egressProxyUrl，本地配置会被忽略，不用读；没有策略才看 configLibrary 里正在用的本地配置（和英文启动器同一顺序）。
+if ($null -ne $machineClaudePolicy.disableAutoUpdates) {
+  if ($machineClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
+    Add-Result PASS 'Claude Desktop 本地代理' "HKLM egressProxyUrl=$expectedDesktopProxy"
+  } else {
+    Add-Result FAIL 'Claude Desktop 本地代理' "HKLM 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
+  }
+} elseif ($null -ne $userClaudePolicy.disableAutoUpdates) {
+  if ($userClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
+    Add-Result PASS 'Claude Desktop 本地代理' "HKCU egressProxyUrl=$expectedDesktopProxy"
+  } else {
+    Add-Result FAIL 'Claude Desktop 本地代理' "HKCU 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
+  }
+} elseif (-not (Test-Path -LiteralPath $desktopMeta)) {
+  Add-Result FAIL 'Claude Desktop 本地代理' '没有 Claude 策略，也缺少 configLibrary 元数据'
+} else {
   try {
     $meta = Get-Content -LiteralPath $desktopMeta -Raw | ConvertFrom-Json
-    $profilePath = Join-Path $desktopConfigRoot ($meta.appliedId + '.json')
-    $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
-    if ($null -ne $machineClaudePolicy.disableAutoUpdates) {
-      if ($machineClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
-        Add-Result PASS 'Claude Desktop 本地代理' "HKLM egressProxyUrl=$expectedDesktopProxy"
-      } else {
-        Add-Result FAIL 'Claude Desktop 本地代理' "HKLM 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
-      }
-    } elseif ($null -ne $userClaudePolicy.disableAutoUpdates) {
-      if ($userClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
-        Add-Result PASS 'Claude Desktop 本地代理' "HKCU egressProxyUrl=$expectedDesktopProxy"
-      } else {
-        Add-Result FAIL 'Claude Desktop 本地代理' "HKCU 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
-      }
-    } elseif ($profile.egressProxyUrl -eq $expectedDesktopProxy) {
+    $profile = Get-Content -LiteralPath (Join-Path $desktopConfigRoot ($meta.appliedId + '.json')) -Raw | ConvertFrom-Json
+    if ($profile.egressProxyUrl -eq $expectedDesktopProxy) {
       Add-Result PASS 'Claude Desktop 本地代理' "本地 egressProxyUrl=$expectedDesktopProxy"
     } else {
       Add-Result FAIL 'Claude Desktop 本地代理' "当前应用配置没有指向 $portDesktop"
@@ -249,8 +251,6 @@ if (Test-Path -LiteralPath $desktopMeta) {
   } catch {
     Add-Result FAIL 'Claude Desktop 本地代理' '无法读取当前应用配置'
   }
-} else {
-  Add-Result FAIL 'Claude Desktop 本地代理' '缺少 configLibrary 元数据'
 }
 
 $machineUpdatePolicy = $machineClaudePolicy.disableAutoUpdates
@@ -376,6 +376,15 @@ if ($Scope -eq 'All') {
     } catch {
       Add-Result FAIL 'Anthropic 网段直连阻断' ('检查失败：' + $_.Exception.Message)
     }
+  }
+
+  # 全局断网开关：Clash/TUN 不在时整机断网的那道兜底；被急救命令解除后没人提醒，所以这里和后台巡检都查。
+  try {
+    $killSwitch = (& (Join-Path $PSScriptRoot 'Desktop防护\全局断网开关.ps1') -Action Status -Json | Out-String) | ConvertFrom-Json
+    if ($killSwitch.Succeeded) { Add-Result PASS '全局断网开关' $killSwitch.Evidence }
+    else { Add-Result FAIL '全局断网开关' $killSwitch.Evidence }
+  } catch {
+    Add-Result FAIL '全局断网开关' ('检查失败：' + $_.Exception.Message)
   }
 
   # 正在跑的 claude.exe 实际连到哪。直连防护只认精确路径，而 Desktop 自带的 Code 标签页程序路径带版本和哈希、由 Desktop 自己下载更新，进不了名单；

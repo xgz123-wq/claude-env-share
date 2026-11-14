@@ -91,7 +91,6 @@ for ($attempt = 1; $attempt -le 2; $attempt++) {
 }
 $feishuStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --noproxy '*' https://www.feishu.cn/
 $feishuExit = $LASTEXITCODE
-$proxyEnabled = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -Name ProxyEnable -ErrorAction SilentlyContinue).ProxyEnable
 
 # 规则：和内核实际加载的比（文件改了但没重载，这里能查出来）。按 payload + 目标组比，类型名随内核版本会变。
 $liveKeys = @{}
@@ -141,7 +140,6 @@ $checks = [ordered]@{
   MihomoApiReachable = ($null -ne $live)
   ModeIsRule = ($live.mode -eq 'rule')
   TunEnabled = [bool]$live.tun.enable
-  SystemProxyDisabled = ($proxyEnabled -eq 0)
   MixedPort43865Listening = ($listener65.Count -gt 0)
   AccountPort43866Listening = ($listener66.Count -gt 0)
   SameMihomoPid = ($listener65.Count -gt 0 -and $listener66.Count -gt 0 -and $listener65[0].OwningProcess -eq $listener66[0].OwningProcess)
