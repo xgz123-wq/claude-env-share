@@ -37,7 +37,6 @@ function Get-RuleData {
     exact    = @(Items $list.Exact)
     geosites = @(Items $list.Geosites)
     ip       = @(Items $list.IpRules)
-    doh      = @(Items $list.DohSuffixes)
     block    = @(Get-Ranges | ForEach-Object Cidr)
   }
   '<script type="application/json" id="rule-data">' + ($data | ConvertTo-Json -Depth 5 -Compress) + '</script>'
@@ -57,8 +56,6 @@ function Get-RuleTable {
   foreach ($i in $list.Geosites) { $rows += Row "GEOSITE,$($i.Value),$g" $i.Note }
   $rows += Group-Row "IP 规则 $(@($list.IpRules).Count) 条：只有程序直接连 IP 时才命中"
   foreach ($i in $list.IpRules) { $rows += Row "$($i.Value),$g,no-resolve" $i.Note }
-  $rows += Group-Row '加密 DNS 服务：强制直连，防止国内域名被解析成海外地址'
-  foreach ($i in $list.DohSuffixes) { $rows += Row "DOMAIN-SUFFIX,$($i.Value),DIRECT" $i.Note }
   $rows += Group-Row '防火墙阻断（大门黑名单）：任何程序直连这些网段都拦'
   foreach ($r in Get-Ranges) { $rows += Row $r.Cidr $r.Rule }
   $rows += '</table></div>'

@@ -41,12 +41,6 @@ function main(config, profileName) {
     "IP-CIDR6,2607:6bc0::/32",   // 官方 IPv6，含 API 接收段 2607:6bc0::/48
     "IP-ASN,399358"              // Anthropic 的自治系统号，兜官方还没列出的新段
   ];
-  // 浏览器和应用自带的加密 DNS（走 443，不被 53 劫持）强制直连：
-  // 落兜底规则会进美国线路，导致国内域名被解析成海外 IP（2026-09-28 Edge 实例）。
-  var dohSuffixes = [
-    "cloudflare-dns.com",  // Cloudflare DoH
-    "dns.google"           // Google DoH
-  ];
   // 订阅自带的 Claude 规则按这个特征清掉，防止 Claude 被送去别的组。验证脚本用同一个特征查漏网的。
   var claudeIdentity = /anthropic|claude|clau\.de|160\.79\.104\.|153\.61\.224\.|2607:6bc0|399358/i;
   // ===== 规则清单 结束 =====
@@ -63,7 +57,6 @@ function main(config, profileName) {
       return item + "," + groupName + ",no-resolve";
     })
   );
-  var dohRules = toRules("DOMAIN-SUFFIX,", dohSuffixes, "DIRECT");
 
   // 只看「类型,匹配内容」两段，不看目标组名：订阅可能有叫 Claude 的组，指向它的其他规则不该被误删。
   function isClaudeRule(rule) {
@@ -200,34 +193,43 @@ function main(config, profileName) {
   function ruleKey(rule) {
     return typeof rule === "string" ? rule.replace(/\s+/g, "").toUpperCase() : "";
   }
+  // 按经验帖的顺序排：Claude → 局域网 → B 站和微信 → 海外分类 → 国内名单 → 其余全走 ACCOUNT-US。
+  // 直连只认这里写的几类：订阅自带的 DIRECT 规则全部清掉，订阅的拦截规则和改指账号组的规则保留在局域网之后。
+  var lanRules = [
+    "IP-CIDR,127.0.0.0/8", "IP-CIDR,10.0.0.0/8", "IP-CIDR,172.16.0.0/12", "IP-CIDR,192.168.0.0/16",
+    "IP-CIDR,100.64.0.0/10", "IP-CIDR,169.254.0.0/16",
+    "IP-CIDR6,::1/128", "IP-CIDR6,fc00::/7", "IP-CIDR6,fe80::/10"
+  ].map(function (item) {
+    return item + ",DIRECT,no-resolve";
+  });
   var subscriptionRules = config.rules.map(retarget).filter(function (rule) {
     var key = ruleKey(rule);
-    // 兜底、海外分类、B 站关键词由下面统一重排，先清掉订阅里的同类规则
-    return !/^MATCH,/.test(key) &&
-      !/^GEOSITE,GEOLOCATION-!CN,/.test(key) &&
-      !/^DOMAIN-KEYWORD,MIRRORAKAM,/.test(key);
-  }).map(function (rule) {
-    // 国内 IP 规则不为匹配去解析域名
-    return /^GEOIP,CN,DIRECT$/.test(ruleKey(rule)) ? rule.replace(/\s+/g, "") + ",no-resolve" : rule;
+    return !/,DIRECT(,|$)/.test(key) && !/^MATCH,/.test(key) && !/^GEOSITE,GEOLOCATION-!CN,/.test(key);
   });
-  if (!subscriptionRules.some(function (rule) { return /^GEOSITE,CN,DIRECT/.test(ruleKey(rule)); })) {
-    subscriptionRules.push("GEOSITE,cn,DIRECT");
-  }
-  if (!subscriptionRules.some(function (rule) { return /^GEOIP,CN,DIRECT/.test(ruleKey(rule)); })) {
-    subscriptionRules.push("GEOIP,CN,DIRECT,no-resolve");
-  }
-  // 海外分类必须排在国内名单前面：国内名单里混着 googletagmanager 这类海外域名，不先拦走会用国内 IP 出去。
-  // B 站视频走 akamaized.net，属于海外分类，按关键词先放直连。
-  var cnIndex = subscriptionRules.findIndex(function (rule) {
-    return /^GEOSITE,CN,DIRECT/.test(ruleKey(rule));
-  });
-  subscriptionRules.splice(cnIndex, 0,
-    "DOMAIN-KEYWORD,mirrorakam,DIRECT",
-    "GEOSITE,geolocation-!cn," + groupName
-  );
-  subscriptionRules.push("MATCH," + groupName);
+  // 国内名单用 Loyalsoldier/clash-rules 的 direct（国内域名）和 cncidr（国内 IP），每天更新，经账号组下载。
+  config["rule-providers"] = config["rule-providers"] || {};
+  config["rule-providers"]["loyalsoldier-direct"] = {
+    type: "http", behavior: "domain", format: "yaml", interval: 86400, proxy: groupName,
+    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/direct.txt",
+    path: "./ruleset/loyalsoldier-direct.yaml"
+  };
+  config["rule-providers"]["loyalsoldier-cncidr"] = {
+    type: "http", behavior: "ipcidr", format: "yaml", interval: 86400, proxy: groupName,
+    url: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/cncidr.txt",
+    path: "./ruleset/loyalsoldier-cncidr.yaml"
+  };
+  var domesticRules = [
+    "GEOSITE,bilibili,DIRECT",
+    "DOMAIN-KEYWORD,mirrorakam,DIRECT",   // B 站视频走 akamaized.net，按后缀匹配不上
+    "GEOSITE,tencent,DIRECT",             // 微信（库里没有单独的 wechat 分类）
+    // 海外分类必须排在国内名单前面：direct.txt 里混着 googletagmanager、doubleclick 这类海外域名。
+    "GEOSITE,geolocation-!cn," + groupName,
+    "RULE-SET,loyalsoldier-direct,DIRECT",
+    "RULE-SET,loyalsoldier-cncidr,DIRECT,no-resolve",
+    "MATCH," + groupName
+  ];
 
-  config.rules = [inboundRule].concat(claudeRules, dohRules, subscriptionRules);
+  config.rules = [inboundRule].concat(claudeRules, lanRules, subscriptionRules, domesticRules);
 
   // 使用 Mihomo 官方生态 MetaCubeX 数据，每日更新；失败时继续保留本地旧文件。
   config["geo-auto-update"] = true;

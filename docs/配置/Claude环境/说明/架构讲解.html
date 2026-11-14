@@ -511,7 +511,7 @@
   <div class="groups" id="groups"></div>
 </div>
 <!-- 生成:规则数据 开始 -->
-<script type="application/json" id="rule-data">{"group":"ACCOUNT-US","suffixes":[{"v":"anthropic.com","n":"API（api.）、MCP 连接器（mcp-proxy.）、Desktop 的 CDN（a-cdn.、assets-proxy. 等）"},{"v":"claude.ai","n":"网页和账号登录；downloads.claude.ai 是插件、原生安装和自动更新的下载点"},{"v":"claude.com","n":"登录跳转、OAuth（platform.）、单点登录（sso.）、官方文档（code.）"},{"v":"claude.app","n":"Desktop 官方清单里的 livepreview 预览"},{"v":"clau.de","n":"短链；官方网络清单没列，geosite 有"},{"v":"claudemcpclient.com","n":"MCP 相关；官方网络清单没列，geosite 有"},{"v":"claudemcpcontent.com","n":"对话里的 MCP Apps 小组件"},{"v":"claudeusercontent.com","n":"Claude in Chrome 桥接（bridge.）、Artifact 内容（frame.）"}],"exact":[{"v":"anthropic.com.cdn.cloudflare.net","n":"anthropic.com 在 Cloudflare 上的 CNAME；不在 geosite"},{"v":"anthropic.auth0.com","n":"Anthropic 专属的 Auth0 登录租户；不在 geosite"},{"v":"anthropic-com.ghost.io","n":"Anthropic 专属的 Ghost 托管；不在 geosite"},{"v":"http-intake.logs.us5.datadoghq.com","n":"官方清单点名的运行遥测；其他 Datadog 域名不入组"}],"geosites":[{"v":"anthropic","n":"与后缀有重叠是故意的：主通道不押在第三方库上，后缀还要和 DNS policy 一一对应"}],"ip":[{"v":"IP-CIDR,160.79.104.0/21","n":"官方对外段，含 API 接收段 160.79.104.0/23"},{"v":"IP-CIDR,153.61.224.0/22","n":"官方 API 接收段"},{"v":"IP-CIDR6,2607:6bc0::/32","n":"官方 IPv6，含 API 接收段 2607:6bc0::/48"},{"v":"IP-ASN,399358","n":"Anthropic 的自治系统号，兜官方还没列出的新段"}],"doh":[{"v":"cloudflare-dns.com","n":"Cloudflare DoH"},{"v":"dns.google","n":"Google DoH"}],"block":["160.79.104.0/23","153.61.224.0/22"]}</script>
+<script type="application/json" id="rule-data">{"group":"ACCOUNT-US","suffixes":[{"v":"anthropic.com","n":"API（api.）、MCP 连接器（mcp-proxy.）、Desktop 的 CDN（a-cdn.、assets-proxy. 等）"},{"v":"claude.ai","n":"网页和账号登录；downloads.claude.ai 是插件、原生安装和自动更新的下载点"},{"v":"claude.com","n":"登录跳转、OAuth（platform.）、单点登录（sso.）、官方文档（code.）"},{"v":"claude.app","n":"Desktop 官方清单里的 livepreview 预览"},{"v":"clau.de","n":"短链；官方网络清单没列，geosite 有"},{"v":"claudemcpclient.com","n":"MCP 相关；官方网络清单没列，geosite 有"},{"v":"claudemcpcontent.com","n":"对话里的 MCP Apps 小组件"},{"v":"claudeusercontent.com","n":"Claude in Chrome 桥接（bridge.）、Artifact 内容（frame.）"}],"exact":[{"v":"anthropic.com.cdn.cloudflare.net","n":"anthropic.com 在 Cloudflare 上的 CNAME；不在 geosite"},{"v":"anthropic.auth0.com","n":"Anthropic 专属的 Auth0 登录租户；不在 geosite"},{"v":"anthropic-com.ghost.io","n":"Anthropic 专属的 Ghost 托管；不在 geosite"},{"v":"http-intake.logs.us5.datadoghq.com","n":"官方清单点名的运行遥测；其他 Datadog 域名不入组"}],"geosites":[{"v":"anthropic","n":"与后缀有重叠是故意的：主通道不押在第三方库上，后缀还要和 DNS policy 一一对应"}],"ip":[{"v":"IP-CIDR,160.79.104.0/21","n":"官方对外段，含 API 接收段 160.79.104.0/23"},{"v":"IP-CIDR,153.61.224.0/22","n":"官方 API 接收段"},{"v":"IP-CIDR6,2607:6bc0::/32","n":"官方 IPv6，含 API 接收段 2607:6bc0::/48"},{"v":"IP-ASN,399358","n":"Anthropic 的自治系统号，兜官方还没列出的新段"}],"block":["160.79.104.0/23","153.61.224.0/22"]}</script>
 <!-- 生成:规则数据 结束 -->
 <p class="aside rv">这里按规则清单判断。要看真实走向，让 AI 跑 <code>Clash/查域名走哪条规则.ps1</code>。</p>
 
@@ -542,9 +542,6 @@
 <tr><td><code>IP-CIDR,153.61.224.0/22,ACCOUNT-US,no-resolve</code></td><td>官方 API 接收段</td></tr>
 <tr><td><code>IP-CIDR6,2607:6bc0::/32,ACCOUNT-US,no-resolve</code></td><td>官方 IPv6，含 API 接收段 2607:6bc0::/48</td></tr>
 <tr><td><code>IP-ASN,399358,ACCOUNT-US,no-resolve</code></td><td>Anthropic 的自治系统号，兜官方还没列出的新段</td></tr>
-<tr class="grp"><td colspan="2">加密 DNS 服务：强制直连，防止国内域名被解析成海外地址</td></tr>
-<tr><td><code>DOMAIN-SUFFIX,cloudflare-dns.com,DIRECT</code></td><td>Cloudflare DoH</td></tr>
-<tr><td><code>DOMAIN-SUFFIX,dns.google,DIRECT</code></td><td>Google DoH</td></tr>
 <tr class="grp"><td colspan="2">防火墙阻断（大门黑名单）：任何程序直连这些网段都拦</td></tr>
 <tr><td><code>160.79.104.0/23</code></td><td>Claude-Anthropic-Direct-Block-160.79.104.0-23</td></tr>
 <tr><td><code>153.61.224.0/22</code></td><td>Claude-Anthropic-Direct-Block-153.61.224.0-22</td></tr>
@@ -996,7 +993,6 @@
     for (i = 0; i < D.suffixes.length; i++){ if (under(h, D.suffixes[i].v)) return hit(h, D.suffixes[i].v + ' 后缀', D.group, D.suffixes[i].n); }
     for (i = 0; i < D.exact.length; i++){ if (h === D.exact[i].v) return hit(h, '精确域名', D.group, D.exact[i].n); }
     for (i = 0; i < GEO.length; i++){ if (under(h, GEO[i])) return hit(h, 'anthropic 分类', D.group, '第三方库 geosite 补上的（2026-11-05 快照）'); }
-    for (i = 0; i < D.doh.length; i++){ if (under(h, D.doh[i].v)) return hit(h, D.doh[i].v + ' 后缀', '直连', D.doh[i].n); }
     return none(h);
   }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }

@@ -1,6 +1,6 @@
 # 从 Clash\Clash全局账号通道.js 读 Claude 规则清单。JS 是规则的唯一来源，验证脚本、官方域名复核、架构讲解页都调这里，不要在别处另抄一份。
 # 用法：. <本脚本>；$list = Get-ClaudeRuleList
-# 返回：Group、InboundRule、Suffixes / Exact / Geosites / IpRules / DohSuffixes（每条 Value + Note，Note 是 JS 行尾的用途说明）、
+# 返回：Group、InboundRule、Suffixes / Exact / Geosites / IpRules（每条 Value + Note，Note 是 JS 行尾的用途说明）、
 #       Rules（按顺序的完整规则串）、DnsDomains（+.后缀）、Payloads（规则的匹配内容，和内核 /rules 接口的 payload 对得上）、IdentityPattern。
 # 只读 JS 文件本身，不连 Clash。
 
@@ -35,7 +35,6 @@ function Get-ClaudeRuleList {
   $exact = Read-JsList 'claudeExactDomains'
   $geosites = Read-JsList 'claudeGeosites'
   $ipRules = Read-JsList 'claudeIpRules'
-  $doh = Read-JsList 'dohSuffixes'
   $identity = [regex]::Match($text, 'var claudeIdentity = /(.+)/i;')
   if (-not $identity.Success) { throw 'JS 里找不到 claudeIdentity' }
 
@@ -51,7 +50,6 @@ function Get-ClaudeRuleList {
     Exact           = $exact
     Geosites        = $geosites
     IpRules         = $ipRules
-    DohSuffixes     = $doh
     Rules           = $rules
     DnsDomains      = @($suffixes | ForEach-Object { "+.$($_.Value)" })
     Payloads        = @($rules | ForEach-Object { ($_ -split ',')[1] })
