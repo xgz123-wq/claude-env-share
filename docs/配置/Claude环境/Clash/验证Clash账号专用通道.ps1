@@ -19,11 +19,9 @@ $claudeList = Get-ClaudeRuleList
 $group = $claudeList.Group
 $inboundPayload = ($claudeList.InboundRule -split ',')[1]
 
-# 设计决定，不是规则清单的副本：宽泛的遥测规则不许进账号组。官方只点名一个精确的 Datadog 域名，其余留在订阅自己的分流里。
-$forbiddenBroadTelemetryPayloads = @(
-  'sentry.io', 'statsigapi.net', 'browser-intake-us5-datadoghq.com', 'datadog', 'sift',
-  'intercom.io', 'intercomcdn.com', 'cdn.usefathom.com'
-)
+# 2026-11-14 统一海外出口：规则去向只许直连、拦截或账号组，最后一条 MATCH 进账号组（节点挂了就断，不回落直连）。
+$allowedRuleTargets = @('DIRECT', 'REJECT', 'REJECT-DROP', 'PASS', $group)
+# 遥测域名的 DNS 不绑账号组：照旧由通用解析器处理，路由仍随 MATCH 走账号组。
 $forbiddenBroadTelemetryDnsDomains = @('+.sentry.io', '+.statsigapi.net', '+.datadoghq.com', '+.intercom.io', '+.intercomcdn.com')
 
 # 连不上内核时也要照样输出 JSON，让总检显示具体原因，而不是给一个空的失败项列表。
@@ -111,11 +109,15 @@ if ($managedIndexes.Count -gt 0) {
 $legacyClaudeBindings = @($liveRules | Where-Object {
   $_.type -notin @('AND', 'OR', 'NOT', 'Match') -and $_.payload -match $claudeList.IdentityPattern -and $_.proxy -ne $group
 } | ForEach-Object { '{0},{1},{2}' -f $_.type, $_.payload, $_.proxy })
-# 运行中进了账号组、但 JS 清单已经没有的：只提醒，重载 Clash 后消失。
+# 运行中进了账号组、像 Claude 规则、但 JS 清单已经没有的：只提醒，重载 Clash 后消失。
+# 2026-11-14 起订阅规则和 MATCH 也进账号组，所以只看带 Claude 特征的。
 $liveExtraRules = @($liveRules | Where-Object {
-  $_.proxy -eq $group -and $_.payload -ne $inboundPayload -and $_.payload -notin $claudeList.Payloads
+  $_.proxy -eq $group -and $_.payload -ne $inboundPayload -and $_.payload -notin $claudeList.Payloads -and
+  $_.payload -match $claudeList.IdentityPattern
 } | ForEach-Object { '{0},{1}' -f $_.type, $_.payload })
-$broadTelemetryRulesAbsent = -not @($liveRules | Where-Object { $_.proxy -eq $group -and $_.payload -in $forbiddenBroadTelemetryPayloads }).Count
+$lastLiveRule = @($liveRules)[-1]
+$fallbackToAccountUS = ($liveRules.Count -gt 0 -and $lastLiveRule.type -eq 'Match' -and $lastLiveRule.proxy -eq $group -and
+  -not @($liveRules | Where-Object { $_.proxy -notin $allowedRuleTargets }).Count)
 
 # DNS：Claude 后缀的每个解析器都要绑定账号组；只有绑定了账号组的遥测域名才算违规，订阅自己写的不管。
 $dnsPolicy = Get-DnsPolicy $text
@@ -151,7 +153,7 @@ $checks = [ordered]@{
   NoClaudeRulesBoundToOtherGroups = ($liveRules.Count -gt 0 -and $legacyClaudeBindings.Count -eq 0)
   NoDnsBoundToOtherGroups = ($foreignDnsBindingGroups.Count -eq 0)
   ClaudeDnsUsesAccountUS = ($missingClaudeDnsPolicies.Count -eq 0)
-  NoBroadTelemetryRulesInAccountUS = $broadTelemetryRulesAbsent
+  FallbackToAccountUS = $fallbackToAccountUS
   NoBroadTelemetryDnsInAccountUS = $broadTelemetryDnsPoliciesAbsent
   GlobalModeUsesAccountOnly = ($null -ne $globalGroup -and @($globalGroup.all).Count -eq 1 -and @($globalGroup.all)[0] -eq $group -and $globalGroup.now -eq $group)
   AccountNodeSelected =($null -ne $account -and -not [string]::IsNullOrWhiteSpace($account.now))

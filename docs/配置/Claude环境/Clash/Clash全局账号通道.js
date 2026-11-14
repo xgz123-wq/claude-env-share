@@ -166,7 +166,68 @@ function main(config, profileName) {
   config.rules = config.rules.filter(function (rule) {
     return !isClaudeRule(rule) && !isUnconditionalMailDirectRule(rule);
   });
-  config.rules = [inboundRule].concat(claudeRules, dohRules, config.rules);
+  // 2026-11-14 统一海外出口：国内名单直连，其余全部进 ACCOUNT-US（组里没有 DIRECT，节点挂了就断，不换线、不回落直连）。
+  // 订阅规则里除 DIRECT / REJECT 以外的目标组（Proxy、自动切换等）一律改指 ACCOUNT-US，订阅改组名也冲不掉。
+  var keepTargets = /^(DIRECT|REJECT|REJECT-DROP|PASS)$/i;
+  function retarget(rule) {
+    if (typeof rule !== "string") {
+      return rule;
+    }
+    var head;
+    var rest;
+    if (/^(AND|OR|NOT),/i.test(rule)) {
+      var cut = rule.lastIndexOf("),");
+      if (cut < 0) {
+        return rule;
+      }
+      head = rule.slice(0, cut + 1);
+      rest = rule.slice(cut + 2).split(",");
+    } else {
+      var parts = rule.split(",");
+      var headCount = /^MATCH$/i.test(parts[0]) ? 1 : 2;
+      if (parts.length <= headCount) {
+        return rule;
+      }
+      head = parts.slice(0, headCount).join(",");
+      rest = parts.slice(headCount);
+    }
+    if (keepTargets.test(rest[0].trim()) || rest[0].trim() === groupName) {
+      return rule;
+    }
+    rest[0] = groupName;
+    return head + "," + rest.join(",");
+  }
+  function ruleKey(rule) {
+    return typeof rule === "string" ? rule.replace(/\s+/g, "").toUpperCase() : "";
+  }
+  var subscriptionRules = config.rules.map(retarget).filter(function (rule) {
+    var key = ruleKey(rule);
+    // 兜底、海外分类、B 站关键词由下面统一重排，先清掉订阅里的同类规则
+    return !/^MATCH,/.test(key) &&
+      !/^GEOSITE,GEOLOCATION-!CN,/.test(key) &&
+      !/^DOMAIN-KEYWORD,MIRRORAKAM,/.test(key);
+  }).map(function (rule) {
+    // 国内 IP 规则不为匹配去解析域名
+    return /^GEOIP,CN,DIRECT$/.test(ruleKey(rule)) ? rule.replace(/\s+/g, "") + ",no-resolve" : rule;
+  });
+  if (!subscriptionRules.some(function (rule) { return /^GEOSITE,CN,DIRECT/.test(ruleKey(rule)); })) {
+    subscriptionRules.push("GEOSITE,cn,DIRECT");
+  }
+  if (!subscriptionRules.some(function (rule) { return /^GEOIP,CN,DIRECT/.test(ruleKey(rule)); })) {
+    subscriptionRules.push("GEOIP,CN,DIRECT,no-resolve");
+  }
+  // 海外分类必须排在国内名单前面：国内名单里混着 googletagmanager 这类海外域名，不先拦走会用国内 IP 出去。
+  // B 站视频走 akamaized.net，属于海外分类，按关键词先放直连。
+  var cnIndex = subscriptionRules.findIndex(function (rule) {
+    return /^GEOSITE,CN,DIRECT/.test(ruleKey(rule));
+  });
+  subscriptionRules.splice(cnIndex, 0,
+    "DOMAIN-KEYWORD,mirrorakam,DIRECT",
+    "GEOSITE,geolocation-!cn," + groupName
+  );
+  subscriptionRules.push("MATCH," + groupName);
+
+  config.rules = [inboundRule].concat(claudeRules, dohRules, subscriptionRules);
 
   // 使用 Mihomo 官方生态 MetaCubeX 数据，每日更新；失败时继续保留本地旧文件。
   config["geo-auto-update"] = true;

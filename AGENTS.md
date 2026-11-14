@@ -8,11 +8,11 @@
 | 要做什么 | 入口 |
 |---|---|
 | 了解整体、给用户解释 | 用户入口 `docs/配置/Claude环境/说明/架构讲解.html`；`README.md` |
-| 收到外部域名或网段 | Skill `references/03-变更与回滚SOP.md` 的 SOP-6 |
+| 收到外部域名或网段 | `docs/配置/Claude环境/说明/排障与变更.md` 第 7.3 节 |
 | 目录、代理路线 | `docs/配置/Claude环境/README.md` |
-| 排障说明（命令指回 docs） | `.agents/skills/claude-safe-network/SKILL.md` |
+| 排障、换订阅、改端口、回滚、专用 Chrome | `docs/配置/Claude环境/说明/排障与变更.md` |
 | 安装、回滚等一次性工具 | `docs/配置/Claude环境/工具/` |
-| 部署后的 Desktop / CLI 更新 | `.agents/skills/claude-maintenance/SKILL.md` |
+| 部署后的 Desktop / CLI 更新 | `docs/配置/Claude环境/Desktop防护/更新维护说明.md` |
 
 ## 首次部署（新机器）
 
@@ -23,12 +23,12 @@
 | 0 前置 | 确认 Windows 10/11、PowerShell 7、Clash Verge Rev、Chrome、Claude Code、Claude Desktop 已安装；用户已导入订阅；新开窗口能直接运行 `pwsh`，不能就把 `C:\Program Files\PowerShell\7` 加进用户 PATH | `README.md`「适用条件」 |
 | 0a 端口预检 | 读 `%APPDATA%\io.github.clash-verge-rev.clash-verge-rev\verge.yaml` 的 `verge_mixed_port`，不是 `43865` 就请用户在 Verge「设置 → Clash 设置 → 端口设置」里改成 `43865`，不要改脚本去迁就；再查 `43866` / `43867` 是否已被非 `verge-mihomo` 的程序监听，有就停下告诉用户。只读这一个字段，不读 `profiles.yaml` | `README.md`「端口说明」 |
 | 1 Clash | 把 `docs/配置/Claude环境/Clash/Clash全局账号通道.js` 装为 Verge 全局扩展脚本；开 TUN、关系统代理；请用户在 `ACCOUNT-US` 手选节点 | `docs/配置/Claude环境/工具/安装Clash账号专用通道.ps1`、Skill `references/01-架构与配置主体.md` |
-| 2 IPv6 与 DNS | 网卡、Clash 全局、Clash DNS 覆写三层关闭 IPv6 | `docs/配置/Claude环境/说明/DNS分层说明.md` |
+| 2 IPv6 与 DNS | 网卡、Clash 全局、Clash DNS 覆写三层关闭 IPv6 | `docs/配置/Claude环境/说明/排障与变更.md`「DNS 与 IPv6」 |
 | 3 Claude Code | `~/.claude/settings.json` 的 `env` 设 `HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY` 为 `http://127.0.0.1:43865`，`NO_PROXY` 为 `localhost,127.0.0.1,*.local`；只改 `env`，不动其他字段 | Skill `SKILL.md` |
-| 4 专用 Chrome | 每个账号建独立浏览器：`创建账号浏览器.ps1 -Alias 账号1`（别名由用户定） | `docs/配置/Claude环境/工具/创建账号浏览器.ps1`、`docs/配置/Claude环境/说明/账号浏览器.md` |
+| 4 专用 Chrome | 每个账号建独立浏览器：`创建账号浏览器.ps1 -Alias 账号1`（别名由用户定） | `docs/配置/Claude环境/工具/创建账号浏览器.ps1`、`docs/配置/Claude环境/说明/排障与变更.md`「专用 Chrome」 |
 | 5 Desktop 通道 | `Desktop防护/专用通道管理.ps1 -Action Install`（43867 和 Desktop 本地配置）；`Claude自动更新管理.ps1 -Action Disable`（HKLM `disableAutoUpdates` 和 `egressProxyUrl`，两项同层） | `docs/配置/Claude环境/Desktop防护/更新维护说明.md` |
 | 6 直连防护 | 按 `应用过滤目标.示例.json` 生成本机 `应用过滤目标.json`：填本机真实路径，SHA256 审核后填写，GUID 新生成；再 `应用直连防护管理.ps1 -Action Install`（管理员） | 同上 |
-| 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23`、`153.61.224.0/22` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/Anthropic网段直连阻断.md` |
+| 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23`、`153.61.224.0/22` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/排障与变更.md`「两道断网开关」 |
 | 7 快捷方式 | 桌面建「Claude-环境一键总检」「Claude-英文浏览器」「Claude-三端更新」，目标为 PowerShell 7 加 `-File` 指向对应 docs 脚本；再建「Claude-系统架构」，目标为 `说明/架构讲解.html`；各账号 Chrome 快捷方式第 4 步已建 | `docs/配置/Claude环境/说明/日常使用.md`「桌面入口与维护」 |
 | 8 验收 | 一键总检 0 FAIL；`docs/配置/Claude环境/工具/检查脚本完整性.ps1` 0 FAIL；用户肉眼核对检测站；把结果写进 `维护日志.md` | `docs/配置/Claude环境/Claude环境一键总检.ps1` |
 | 8a 环境卫士 | 把卫士最新版的两个 exe 下到安装目录，和分享包 clone 出来的文件夹放在一起（例如 exe 在 `D:\Tools\Claude环境\`，分享包在 `D:\Tools\Claude环境\claude-env-share\`）：`curl.exe -L --fail -o <目录>\ClaudeEnvGuard.exe https://github.com/xgz123-wq/ClaudeEnvGuard/releases/latest/download/ClaudeEnvGuard.exe`，`ceg.exe` 同理；`<目录>\ceg.exe version` 能输出版本号才算下好；再在桌面建「Claude 环境卫士」快捷方式，目标为 `<目录>\ClaudeEnvGuard.exe`、起始位置为 `<目录>`。卫士不用安装、不用填任何设置，第 9 步生成部署清单后它自己找到分享包 | 卫士 [README](https://github.com/xgz123-wq/ClaudeEnvGuard) |
@@ -48,7 +48,7 @@
 
 ## 维护工作流程（部署后）
 
-1. **先读现状**：`docs/配置/Claude环境/README.md` → `维护日志.md` 末尾 → 对应 Skill。
+1. **先读现状**：`docs/配置/Claude环境/README.md` → `维护日志.md` 末尾 → 上表对应文档。
 2. **改前备份**：分享包本身是 git 仓库，改前 `git status` 确认干净，改完提交一次简短中文 commit，不再复制备份；仓库外的文件（Clash 配置、服务和注册表等）仍复制到 `%LOCALAPPDATA%\ClaudeNetworkGuard\<中文任务名>-<yyyyMMdd-HHmmss>\`。
 3. **改后验证**：一键总检 0 FAIL；动了脚本或文档再跑 `docs/配置/Claude环境/工具/检查脚本完整性.ps1`。
 4. **记录**：`维护日志.md` 只保留最近一轮的完整一节，上一轮压成「历史」表一行，不新建记录文件。
@@ -62,7 +62,7 @@
 - **默认不启动**：Claude Desktop、Claude Code、浏览器；一键总检带 `-OpenBrowser` 会打开日常专用 Chrome（默认 `Claude-账号1-专用Chrome.lnk`，用 `-DailyBrowser` 换），先告知。
 - **Claude 规则只在一处**：加减规则只改 `Clash/Clash全局账号通道.js` 的规则清单，网段只改 `Anthropic网段直连阻断.ps1`，再跑 `工具/生成架构讲解.ps1`；用户当次确认后可复制到现场 `Script.js`，重载由用户做。
 - **目录层级不能变**：总检按「脚本目录往上 3 层 = 项目根」定位。
-- **docs 是唯一来源**：脚本、配置和防护状态 json 只在 `docs/配置/Claude环境/`；Skill 只放说明，命令指回 docs，不要在 Skill 里放脚本副本。
+- **docs 是唯一来源**：脚本、配置和防护状态 json 只在 `docs/配置/Claude环境/`；文档也只在这里，不建 Skill。
 - **不导入别人的状态**：防护状态 json、指纹、GUID 必须在本机生成。
 - **会话代理**：若会话环境被注入 `HTTPS_PROXY=http://127.0.0.1:43867`，访问国内站点前用 `env -u HTTPS_PROXY -u HTTP_PROXY -u ALL_PROXY` 去掉代理变量，不要为此改 Clash。
 

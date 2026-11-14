@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 try {
   . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读Claude规则.ps1')
 
-  # 共享或可选的第三方域名：官方清单里出现，但不绑定 ACCOUNT-US（原因见 DNS分层说明「Claude 域名定期复核」）。
+  # 共享或可选的第三方域名：官方清单里出现，但不绑定 ACCOUNT-US（原因见 说明\排障与变更.md 第 7.3 节）。
   # 一律精确匹配，避免把同一后缀下的 Claude 专属子域误当共享。
   $sharedHosts = @(
     'github.com', 'raw.githubusercontent.com', 'registry.npmjs.org', 'storage.googleapis.com',

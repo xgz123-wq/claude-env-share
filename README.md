@@ -22,7 +22,7 @@
 | 看懂架构和规则 | `架构讲解.html` |
 | 查错 | 把报错发给 AI，或看 `架构讲解.html` 的「出问题」 |
 
-`AGENTS.md`、Skill 和脚本是给 AI 的，不用读。
+`AGENTS.md`、给 AI 的说明和脚本不用读。
 
 ## 目录
 
@@ -118,7 +118,7 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 
 如果部署前 `43866` 或 `43867` 已被别的程序占用，先关掉那个程序或改它的端口，再部署。
 
-不建议改这套配置的端口号：Clash 脚本、Claude Code 设置、Desktop 策略和快捷方式都要跟着改，容易漏。确实要改时，按 Skill 的 [SOP-3 改端口流程](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md)操作。
+不建议改这套配置的端口号：Clash 脚本、Claude Code 设置、Desktop 策略和快捷方式都要跟着改，容易漏。确实要改时，按[改端口流程](docs/配置/Claude环境/说明/排障与变更.md#72-改端口或改组名不建议改)操作。
 
 ## 工作原理
 
@@ -132,7 +132,7 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 
 1. [架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)：可点的架构图、规则查询、出问题怎么办（下载后双击打开）。
 2. [规则顺序与三道硬拦](docs/配置/Claude环境/README.md#规则匹配顺序)：规则怎么匹配、系统层拦什么。
-3. [DNS 分层说明](docs/配置/Claude环境/说明/DNS分层说明.md)、[账号浏览器](docs/配置/Claude环境/说明/账号浏览器.md)：DNS、IPv6 和专用 Chrome 的每个参数。
+3. [排障与变更](docs/配置/Claude环境/说明/排障与变更.md)：DNS、IPv6、专用 Chrome 的每个参数，以及排障和变更流程。
 
 ## 日常使用
 
@@ -140,7 +140,7 @@ Get-NetTCPConnection -State Listen -LocalPort 43865,43866,43867 -ErrorAction Sil
 |---|---|
 | 每天开工前检查 | 打开桌面「Claude 环境卫士」做体检，再按[日常使用](docs/配置/Claude环境/说明/日常使用.md)做网页验收；想查得更深，双击「Claude-环境一键总检」 |
 | 查某个域名走哪 | 打开[架构讲解.html](docs/配置/Claude环境/说明/架构讲解.html)的「规则查询」 |
-| 收到新域名或网段 | 发给 AI，说「对比一下我的规则」；流程在 Skill 的 [SOP-6](.agents/skills/claude-safe-network/references/03-变更与回滚SOP.md) |
+| 收到新域名或网段 | 发给 AI，说「对比一下我的规则」；流程在[排障与变更 7.3](docs/配置/Claude环境/说明/排障与变更.md#73-收到外部域名网段清单或域名复核报新域名) |
 | 看三端要不要更新 | `pwsh -NoProfile -File docs\配置\Claude环境\Desktop防护\更新三端Claude.ps1 -Action Check` |
 | 更新三端 | 退出全部 Claude 后双击桌面「Claude-三端更新」，细节见[更新维护说明](docs/配置/Claude环境/Desktop防护/更新维护说明.md) |
 
@@ -202,11 +202,8 @@ Claude环境分享版/
 │  ├─ Clash/                 全局扩展脚本、通道验证、官方域名复核、查域名走哪条规则
 │  ├─ Desktop防护/           直连防护、43867 通道、三端更新
 │  ├─ 工具/                  完整性检查、入口页生成与一次性安装、回滚工具
-│  ├─ 说明/                  入口页（架构讲解）和四份专题说明
+│  ├─ 说明/                  入口页（架构讲解）、日常使用、排障与变更
 │  └─ assets/                架构图与图标
-└─ .agents/skills/
-   ├─ claude-safe-network/   排障说明（命令指回 docs）
-   └─ claude-maintenance/    Desktop / CLI 更新流程
 ```
 
 脚本按「脚本目录往上 3 层 = 项目根」定位，不要改目录名或层级。各文件用途见 [docs 总览](docs/配置/Claude环境/README.md)。

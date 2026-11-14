@@ -114,7 +114,7 @@ foreach ($l in $scriptLinks) {
 }
 
 # 6. 文档里的相对链接
-$docRoots = @($envRoot, (Join-Path $projectRoot '.agents\skills\claude-safe-network'), (Join-Path $projectRoot '.agents\skills\claude-maintenance'))
+$docRoots = @($envRoot)
 $docs = @($docRoots | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter '*.md' } |
   Where-Object { $_.FullName -notmatch '\\历史\\' })
 $agents = Join-Path $projectRoot 'AGENTS.md'
