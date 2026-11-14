@@ -110,9 +110,23 @@ function main(config, profileName) {
       Array.isArray(config.dns["nameserver-policy"])) {
     config.dns["nameserver-policy"] = {};
   }
+  // 2026-11-14 按经验帖：走直连的国内域名（和规则同一份 Loyalsoldier direct 名单）由国内 DNS 解析；
+  // 原来按 geosite:cn 选国内 DNS 的条目去掉，免得两份名单不一致。局域网域名照旧问国内 DNS。
+  // 只改「谁来回答国内域名」，不改任何流量的去向；Claude 后缀排在最前面，仍经 ACCOUNT-US 查。
+  var domesticDnsServers = ["223.5.5.5", "119.29.29.29"];
+  var oldPolicy = config.dns["nameserver-policy"];
+  var newPolicy = {};
   claudeSuffixes.forEach(function (suffix) {
-    config.dns["nameserver-policy"]["+." + suffix] = accountDnsServers.slice();
+    newPolicy["+." + suffix] = accountDnsServers.slice();
   });
+  newPolicy["rule-set:loyalsoldier-direct"] = domesticDnsServers.slice();
+  newPolicy["geosite:private"] = domesticDnsServers.slice();
+  Object.keys(oldPolicy).forEach(function (key) {
+    if (!(key in newPolicy) && !/geosite:[^,]*\bcn\b/i.test(key)) {
+      newPolicy[key] = oldPolicy[key];
+    }
+  });
+  config.dns["nameserver-policy"] = newPolicy;
 
   // 2026-09-11 DNS 分层：不覆盖 nameserver、direct-nameserver 或 fallback。
   // 这样飞书等普通应用的 DNS 不依赖 ACCOUNT-US；Claude 域名仍由上方 policy 加固。
