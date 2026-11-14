@@ -175,7 +175,7 @@
   </g>
   <g id="n-wan" class="fm-n">
     <rect class="fm-mute" x="782" y="526" width="198" height="40" rx="10"/>
-    <text x="881" y="551" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">别的地址：走宽带</text>
+    <text x="881" y="551" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">其余：断网开关拦下</text>
   </g>
 
   <!-- 平时的流动：没有脚本也会动 -->

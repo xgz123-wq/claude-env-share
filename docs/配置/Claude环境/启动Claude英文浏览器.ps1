@@ -53,35 +53,8 @@ function Get-EffectiveClaudeProxy {
     return [pscustomobject]@{ Source = '本地配置'; Value = [string]$profile.egressProxyUrl }
 }
 
-function Test-RecordedFilters {
-    param($RecordedTargets, $ManifestTargets)
-
-    if (@($RecordedTargets).Count -ne @($ManifestTargets).Count) { return $false }
-    foreach ($manifestTarget in @($ManifestTargets)) {
-        $recordedTarget = @($RecordedTargets | Where-Object Path -eq $manifestTarget.Path)
-        if ($recordedTarget.Count -ne 1) { return $false }
-        $filters = @($recordedTarget[0].Filters)
-        if ($filters.Count -ne 2) { return $false }
-        $expectedKeys = @([string]$manifestTarget.V4, [string]$manifestTarget.V6)
-        if (@($filters | Where-Object { [string]$_.Key -notin $expectedKeys }).Count) { return $false }
-        if (@($filters | Where-Object {
-            $_.Enabled -ne $true -or
-            $_.Persistent -ne $true -or
-            $_.ExactAppIdCondition -ne $true -or
-            $_.NonLoopbackCondition -ne $true -or
-            $_.IsOwnedExactBlock -ne $true
-        }).Count) { return $false }
-    }
-    return $true
-}
-
-# CLI 会自更新且路径不变，WFP 规则仍生效，所以两个 npm 目标允许按 Anthropic 签名放行；Desktop 和插件只认登记哈希。
-function Test-GuardBinary($Target) {
-    if ((Get-FileHash -LiteralPath $Target.Path -Algorithm SHA256).Hash -eq $Target.SHA256) { return $true }
-    if ([string]$Target.Name -notlike 'Claude Code npm*') { return $false }
-    $signature = Get-AuthenticodeSignature -LiteralPath $Target.Path
-    return ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'O="?Anthropic, PBC"?(,|$)')
-}
+# 直连防护凭证判定和一键总检共用一份。
+. (Join-Path $PSScriptRoot '工具\读防护凭证.ps1')
 
 function Assert-GuardEvidence {
     param([string]$PackageVersion)
@@ -132,7 +105,7 @@ function Assert-GuardEvidence {
     if ([string]$state.Status -notlike 'installed_*' -or $state.ManifestSHA256 -ne $manifestHash) {
         throw 'Windows 直连防护安装状态与当前目标清单不一致。'
     }
-    if (-not (Test-RecordedFilters $state.Targets $manifest.Targets)) {
+    if (-not (Test-GuardRecord -RecordedTargets $state.Targets -ManifestTargets $manifest.Targets)) {
         throw 'Windows 直连防护安装记录不完整。'
     }
 
@@ -143,12 +116,12 @@ function Assert-GuardEvidence {
             ($verify.Status -eq 'passed') -and
             ($verify.ManifestSHA256 -eq $manifestHash) -and
             ($verify.PackageVersionMatches -eq $true) -and
-            (Test-RecordedFilters $verify.Targets $manifest.Targets)
+            (Test-GuardRecord -RecordedTargets $verify.Targets -ManifestTargets $manifest.Targets -RequireBinaryUnchanged)
     }
     $installReady =
         ($install.Action -eq 'Install') -and
         ($install.Status -eq 'passed') -and
-        (Test-RecordedFilters $install.Installed $manifest.Targets)
+        (Test-GuardRecord -RecordedTargets $install.Installed -ManifestTargets $manifest.Targets)
     if (-not $verifyReady -and -not $installReady) {
         throw '没有与当前版本匹配的管理员安装或 Verify 凭证。'
     }

@@ -66,16 +66,6 @@ function main(config, profileName) {
     return rule === inboundRule || claudeIdentity.test(rule.split(",").slice(0, 2).join(","));
   }
 
-  // 订阅可能注入邮件端口无条件 DIRECT；精确过滤后让它们继续按 CN / MATCH 规则分流。
-  function isUnconditionalMailDirectRule(rule) {
-    if (typeof rule !== "string") {
-      return false;
-    }
-    return /^DST-PORT,(25|110|143|465|587|993|995),DIRECT(?:,.*)?$/i.test(
-      rule.replace(/\s+/g, "")
-    );
-  }
-
   if (!Array.isArray(config["proxy-groups"])) {
     config["proxy-groups"] = [];
   }
@@ -171,7 +161,7 @@ function main(config, profileName) {
     config.rules = [];
   }
   config.rules = config.rules.filter(function (rule) {
-    return !isClaudeRule(rule) && !isUnconditionalMailDirectRule(rule);
+    return !isClaudeRule(rule);
   });
   // 2026-11-14 统一海外出口：国内名单直连，其余全部进 ACCOUNT-US（组里没有 DIRECT，节点挂了就断，不换线、不回落直连）。
   // 订阅规则里除 DIRECT / REJECT 以外的目标组（Proxy、自动切换等）一律改指 ACCOUNT-US，订阅改组名也冲不掉。

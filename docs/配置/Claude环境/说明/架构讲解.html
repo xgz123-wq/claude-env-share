@@ -209,7 +209,7 @@
 <main>
 <header class="mast" id="top">
   <h1>Claude 环境，一页看懂</h1>
-  <p class="lede"><b>三扇门，一个出口，不通就断。</b>Claude 只从一个固定出口出去；Clash 不在时，名单内的程序只断网，不走宽带。</p>
+  <p class="lede"><b>三扇门，一个出口，不通就断。</b>Claude 只从一个固定出口出去；Clash 不在时整台电脑断网，不走宽带。</p>
 </header>
 
 <section id="arch" class="map rv">
@@ -399,7 +399,7 @@
   </g>
   <g id="n-wan" class="fm-n">
     <rect class="fm-mute" x="782" y="526" width="198" height="40" rx="10"/>
-    <text x="881" y="551" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">别的地址：走宽带</text>
+    <text x="881" y="551" text-anchor="middle" class="fm-t fm-b" style="font-size:14px">其余：断网开关拦下</text>
   </g>
 
   <!-- 平时的流动：没有脚本也会动 -->
@@ -433,7 +433,7 @@
 <tr><td><b>VS Code 插件</b></td><td><code>43865</code></td><td>按规则，Claude 的域名才进</td><td class="yes">有</td></tr>
 <tr><td><b>其他程序</b></td><td>TUN</td><td>按规则，Claude 的域名才进</td><td>没有</td></tr>
 </table></div>
-<p>名单外还有 Cowork 虚拟机、GitHub MCP、curl、git、node：Clash 开着时 Claude 的域名照样进出口，Clash 不在时只有 Anthropic 网段被拦。</p>
+<p>名单外还有 Cowork 虚拟机、GitHub MCP、curl、git、node：Clash 开着时 Claude 的域名照样进出口，Clash 不在时被全局断网开关拦下。</p>
 </div></details>
 
 <h2 id="start" class="rv">我想做什么</h2>
@@ -447,7 +447,7 @@
   <div><b>查域名走哪</b><span>用下面的<a href="#rules">规则查询</a></span></div>
   <div><b>部署新机器</b><span>让 AI 打开<a href="https://github.com/xgz123-wq/claude-env-share">分享包</a>，说「按 AGENTS.md 部署」</span></div>
 </div>
-<p class="aside rv"><code>AGENTS.md</code>、Skill、维护日志、脚本都是给 AI 的，不用读。</p>
+<p class="aside rv"><code>AGENTS.md</code>、维护日志、脚本都是给 AI 的，不用读。</p>
 
 <h2 id="layers" class="rv">防护五层</h2>
 <p class="sub rv">电脑上有两条路：代理和宽带。宽带一直在，所以要补这五块。点开看细节。</p>
@@ -463,15 +463,16 @@
     <p><b>WebRTC：</b>专用 Chrome 的启动参数堵住</p>
     <p><b>侧门焊死：</b>IPv6 在网卡、Clash、DNS 覆写三处都关</p>
   </div></div></div></div>
-  <div class="layer rv" style="--c:#9c2f2f"><button type="button" aria-expanded="false"><span class="nm">兜底</span><span class="say">Clash 不在时，名单内的程序只断网</span><span class="when red">Clash 不在</span></button><div class="more"><div><div class="in">
+  <div class="layer rv" style="--c:#9c2f2f"><button type="button" aria-expanded="false"><span class="nm">兜底</span><span class="say">Clash 不在时，整台电脑断网</span><span class="when red">Clash 不在</span></button><div class="more"><div><div class="in">
+    <p><b>全局断网开关（WFP）：</b>只放行 Clash 和 TUN，Clash 不在时整台电脑上不了外网；急救看桌面「断网急救.txt」</p>
     <p><b>工牌保安（WFP）：</b>认程序，名单内的 Claude 程序只许连本机</p>
     <p><b>大门黑名单（防火墙）：</b>认地址，谁直连 Anthropic 网段都拦</p>
-    <p><b>名单外：</b>Code 标签页、Cowork 虚拟机、GitHub MCP、curl、git、node 没有保安，直连时只有 Anthropic 网段被拦</p>
+    <p><b>名单外：</b>Code 标签页、Cowork 虚拟机、GitHub MCP、curl、git、node 没有保安：Clash 不在时被断网开关拦下；Clash 开着却切到直连模式时，只有 Anthropic 网段被拦</p>
     <p><b>注意：</b>节点不通时 Clash 还开着，请求只是发不出去，不算漏</p>
   </div></div></div></div>
   <div class="layer rv" style="--c:#5a5148"><button type="button" aria-expanded="false"><span class="nm">维护</span><span class="say">更新后保安还认得人</span><span class="when">每次更新</span></button><div class="more"><div><div class="in">
     <p><b>三端更新：</b>一个入口，先给新版加防护，再切换</p>
-    <p><b>官方域名复核：</b>每周或更新后跑一次</p>
+    <p><b>官方域名复核：</b>后台巡检每天自动跑，更新后再手动跑一次</p>
   </div></div></div></div>
   <div class="layer rv" style="--c:#4a6b52"><button type="button" aria-expanded="false"><span class="nm">设备特征</span><span class="say">语言、时区和出口对得上</span><span class="when">一直</span></button><div class="more"><div><div class="in">
     <p>英文入口启动 Desktop；专用 Chrome 带语言参数；时区卫士能一键修；定位手动关，没有脚本查</p>
@@ -498,6 +499,7 @@
   <li style="--c:#5a5148"><time>10-27</time>端口写在几十处 → <b>部署清单</b></li>
   <li style="--c:#a34e2a"><time>11-05</time>对照外部信息有缺口 → <b>补 3 条规则和 1 个网段</b></li>
   <li style="--c:#5a5148"><time>11-05</time>规则多处手抄、入口散 → <b>规则只留一处，这一页</b></li>
+  <li style="--c:#9c2f2f"><time>11-14</time>Clash 不在时名单外的程序会走宽带 → <b>全局断网开关</b></li>
 </ol>
 </div></details>
 
@@ -648,7 +650,7 @@
 <div class="tw"><table>
 <tr><th>工具</th><th>查什么</th><th>什么时候跑</th></tr>
 <tr><td><code>Clash/查域名走哪条规则.ps1</code></td><td>真发请求，看走哪条规则</td><td>有疑问时</td></tr>
-<tr><td><code>Clash/检查Claude官方域名.ps1</code></td><td>官方文档有没有新域名</td><td>每周、更新后</td></tr>
+<tr><td><code>Clash/检查Claude官方域名.ps1</code></td><td>官方文档有没有新域名</td><td>巡检每天自动、更新后手动</td></tr>
 <tr><td><code>工具/检查脚本完整性.ps1</code></td><td>脚本、文档链接、这一页是否过时</td><td>改了脚本或文档后</td></tr>
 </table></div>
 </div></details>
@@ -686,7 +688,7 @@
   <li>规则最前面插 Claude 规则，清掉订阅自带的 Claude 规则</li>
   <li>开两扇门：<code>43866</code>、<code>43867</code></li>
   <li>Claude 的 8 个后缀单独加密解析，TUN 接管所有 53 端口的 DNS 查询</li>
-  <li>过滤订阅注入的邮件端口直连规则</li>
+  <li>订阅自带的直连规则全部清掉，直连只认国内名单、局域网、B 站和微信</li>
   <li>geo 数据库每天更新，缺库整份配置会加载失败</li>
 </ul>
 </div></details>
@@ -828,7 +830,7 @@
           { p:TUN + R1, show:['p-other','p-tun-box','p-r1-acc','p-acc-anth'] },
           { p:TUN + R2, g:1, show:['p-r2-direct'] },
           { p:TUN + R3, g:1, show:['p-r3-proxy'] }] },
-      off:{ cap:'全部走宽带；只有直连 Anthropic 网段才被黑名单拦。',
+      off:{ cap:'全局断网开关拦下，整台电脑上不了外网。',
         flows:[{ p:'M206,416 H234 V523 H740 C764,523 768,546 782,546', line:1, g:1, show:['n-off','n-g1','n-g2','p-g2-wan'] }] } }
   };
 

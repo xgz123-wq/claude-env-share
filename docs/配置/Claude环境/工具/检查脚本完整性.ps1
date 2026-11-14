@@ -76,6 +76,7 @@ $required = @(
   'Desktop防护\应用直连防护管理.ps1'
   '部署清单.示例.json'
   '工具\读部署清单.ps1'
+  '工具\读防护凭证.ps1'
   '工具\写部署清单.ps1'
   '工具\Clash内核管道.ps1'
   '工具\读Claude规则.ps1'
@@ -155,6 +156,15 @@ try {
   else { Add-Result PASS '入口页链接' "$entryCount 个链接全部有效" }
 } catch {
   Add-Result FAIL '入口页与规则一致' $_.Exception.Message
+}
+
+# 8. 环境卫士 S7 的网段表：它是卫士一键修复的白名单，故意写死在 Go 里，所以这里核对它和网段脚本一致；没有卫士源码（分享包用户）就跳过。
+$guardRangeFile = 'D:\Tools\ClaudeEnvGuard\新版\internal\facts\local.go'
+if (Test-Path -LiteralPath $guardRangeFile) {
+  $scriptRanges = @([regex]::Matches([IO.File]::ReadAllText((Join-Path $envRoot 'Anthropic网段直连阻断.ps1')), "RuleName = '([^']+)'; Cidr = '([^']+)'") | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value)" } | Sort-Object)
+  $guardRanges = @([regex]::Matches([IO.File]::ReadAllText($guardRangeFile), 'RuleID: `([^`]+)`, CIDR: "([^"]+)"') | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value)" } | Sort-Object)
+  if (-not $scriptRanges -or (Compare-Object $scriptRanges $guardRanges)) { Add-Result FAIL '卫士网段表' "网段脚本：$($scriptRanges -join '、')；卫士 local.go：$($guardRanges -join '、')；改网段后要同步卫士并重新打包" }
+  else { Add-Result PASS '卫士网段表' "卫士 S7 的 $($guardRanges.Count) 个网段与 Anthropic网段直连阻断.ps1 一致" }
 }
 
 $color = @{ PASS = 'Green'; WARN = 'Yellow'; FAIL = 'Red' }

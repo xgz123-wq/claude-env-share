@@ -74,41 +74,8 @@ function Test-ProxyExit {
   [pscustomobject]@{Succeeded=($exitCode -eq 0 -and [bool]$ip);IP=$ip;Loc=$loc}
 }
 
-function Test-GuardRecord {
-  param(
-    $RecordedTargets,
-    $ManifestTargets,
-    [switch]$RequireBinaryUnchanged
-  )
-  if (@($RecordedTargets).Count -ne @($ManifestTargets).Count) { return $false }
-  foreach ($manifestTarget in @($ManifestTargets)) {
-    $recordedTarget = @($RecordedTargets | Where-Object Path -eq $manifestTarget.Path)
-    if ($recordedTarget.Count -ne 1) { return $false }
-    if ($RequireBinaryUnchanged -and $recordedTarget[0].BinaryUnchanged -ne $true) { return $false }
-    $filters = @($recordedTarget[0].Filters)
-    if ($filters.Count -ne 2) { return $false }
-    $expectedKeys = @([string]$manifestTarget.V4,[string]$manifestTarget.V6)
-    if (@($filters | Where-Object { [string]$_.Key -notin $expectedKeys }).Count) { return $false }
-    if (@($filters | Where-Object {
-      $_.Enabled -ne $true -or
-      $_.Persistent -ne $true -or
-      $_.ExactAppIdCondition -ne $true -or
-      $_.NonLoopbackCondition -ne $true -or
-      $_.IsOwnedExactBlock -ne $true
-    }).Count) { return $false }
-  }
-  return $true
-}
-
-# 返回 hash / signature / $null。CLI 会自更新且路径不变，WFP 规则仍生效，所以两个 npm 目标允许按 Anthropic 签名放行；Desktop 和插件只认登记哈希。
-function Test-GuardBinary($Target) {
-  if (-not (Test-Path -LiteralPath $Target.Path)) { return $null }
-  if ((Get-FileHash -LiteralPath $Target.Path -Algorithm SHA256).Hash -eq $Target.SHA256) { return 'hash' }
-  if ([string]$Target.Name -notlike 'Claude Code npm*') { return $null }
-  $signature = Get-AuthenticodeSignature -LiteralPath $Target.Path
-  if ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match 'O="?Anthropic, PBC"?(,|$)') { return 'signature' }
-  return $null
-}
+# 直连防护凭证判定和英文启动器共用一份。
+. (Join-Path $PSScriptRoot '工具\读防护凭证.ps1')
 
 Write-Host ''
 Write-Host 'Claude / Clash 环境一键总检' -ForegroundColor Cyan
@@ -136,7 +103,7 @@ if ($Scope -eq 'All') {
         $baseCount = @($baseResult.Checks.PSObject.Properties).Count
         Add-Result PASS 'Rule / TUN / Claude 规则' "基础验证 $baseCount/$baseCount；Clash 配置语法通过"
         Add-Result PASS '国内连通' "飞书 HTTP $($baseResult.FeishuHttpStatus)"
-        Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)；$portBrowser 出口：$($baseResult.SocksPublicIp)"
+        Add-Result PASS 'ACCOUNT-US' "当前节点：$($baseResult.AccountNode)"
         # 改了 JS 没重载、现场脚本没更新，都不影响现在的分流，所以只提醒。
         $syncNotes = @()
         if (@($baseResult.LiveExtraRules).Count) { $syncNotes += "运行中还有 JS 已去掉的规则（$(@($baseResult.LiveExtraRules) -join '、')），在 Clash Verge 里重载后消失" }
@@ -169,7 +136,8 @@ if ($Scope -eq 'All') {
   }
 
   $exit65 = Test-ProxyExit http $portCli
-  $exit66 = Test-ProxyExit socks5h $portBrowser
+  # 43866 的 trace 验证脚本已经带重试测过一次，直接用它的结果；验证没跑成时才自己测。
+  $exit66 = if ($baseResult.SocksPublicIp) { [pscustomobject]@{Succeeded=$true;IP=$baseResult.SocksPublicIp;Loc=$baseResult.SocksLoc} } else { Test-ProxyExit socks5h $portBrowser }
   $exit67 = Test-ProxyExit http $portDesktop
   foreach ($entry in @(
     @{Name="Claude Code $portCli";Value=$exit65},
@@ -353,7 +321,7 @@ if (Test-Path -LiteralPath $guardManifest) {
       ($null -ne $state) -and
       ([string]$state.Status -like 'installed_*') -and
       ($state.ManifestSHA256 -eq $manifestHash) -and
-      (@($state.Targets).Count -eq $targets.Count)
+      (Test-GuardRecord -RecordedTargets $state.Targets -ManifestTargets $targets)
     $verifyReady =
       ($null -ne $verify) -and
       ($verify.Status -eq 'passed') -and

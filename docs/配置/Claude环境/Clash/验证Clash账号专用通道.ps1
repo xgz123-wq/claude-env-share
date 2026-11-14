@@ -78,11 +78,13 @@ $validationExit = $LASTEXITCODE
 
 # 取 Claude 自己的 trace，一次同时证明能到 claude.ai、拿到 Claude 看到的出口 IP。TUN 空闲后第一个 SOCKS 连接握手偏慢，单次 20 秒超时会产生假失败，故重试一次。
 $socksIp = ''
+$socksLoc = ''
 $claudeStatus = '000'
 for ($attempt = 1; $attempt -le 2; $attempt++) {
   $trace = (curl.exe --silent --show-error --max-time 20 --write-out 'http=%{http_code}' --socks5-hostname 127.0.0.1:$portBrowser https://claude.ai/cdn-cgi/trace 2>$null | Out-String)
   $claudeExit = $LASTEXITCODE
   if ($trace -match '(?m)^ip=(\S+)') { $socksIp = $Matches[1] }
+  if ($trace -match '(?m)^loc=(\S+)') { $socksLoc = $Matches[1] }
   if ($trace -match 'http=(\d+)') { $claudeStatus = $Matches[1] }
   if ($claudeExit -eq 0 -and $claudeStatus -ne '000') { break }
   if ($attempt -eq 1) { Start-Sleep -Seconds 3 }
@@ -175,6 +177,7 @@ $result = [pscustomobject]@{
   LiveScriptInSync = $liveScriptInSync
   ExpectedRuleCount = $claudeList.Rules.Count
   SocksPublicIp = $socksIp
+  SocksLoc = $socksLoc
   ClaudeHttpStatus = $claudeStatus
   FeishuHttpStatus = $feishuStatus
   CorePid = @($listener66.OwningProcess | Select-Object -Unique)
