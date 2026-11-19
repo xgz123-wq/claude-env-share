@@ -1,9 +1,12 @@
 #requires -Version 7.0
 # 只读检查 docs\配置\Claude环境\ 这一套脚本和文档有没有被改断：语法、相对路径、卫士依赖的入口、桌面图标目标、文档链接；在分享包里还扫个人信息。
 # 2026-10-26 整合后替代 Skill 的 Check-SuiteIntegrity.ps1；改了脚本或文档、搬了文件后跑一次，要求 0 FAIL。
-# 不联网、不提权、不启动任何程序。运行：pwsh -NoProfile -File <本脚本>
+# 不联网、不提权、不启动任何程序。运行：pwsh -NoProfile -File <本脚本> [-GuardSource <环境卫士源码目录>]
 [CmdletBinding()]
-param()
+param(
+  # 环境卫士源码目录（含 internal\facts\local.go）；传了才核对卫士网段表，分享包用户没有源码就不传。
+  [string] $GuardSource
+)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
@@ -161,9 +164,10 @@ try {
   Add-Result FAIL '入口页与规则一致' $_.Exception.Message
 }
 
-# 8. 环境卫士 S7 的网段表：它是卫士一键修复的白名单，故意写死在 Go 里，所以这里核对它和网段脚本一致；没有卫士源码（分享包用户）就跳过。
-$guardRangeFile = 'D:\Tools\ClaudeEnvGuard\新版\internal\facts\local.go'
-if (Test-Path -LiteralPath $guardRangeFile) {
+# 8. 环境卫士 S7 的网段表：它是卫士一键修复的白名单，故意写死在 Go 里，所以这里核对它和网段脚本一致；没传 -GuardSource（分享包用户没有卫士源码）就跳过。
+$guardRangeFile = if ($GuardSource) { Join-Path $GuardSource 'internal\facts\local.go' } else { '' }
+if ($GuardSource -and -not (Test-Path -LiteralPath $guardRangeFile)) { Add-Result FAIL '卫士网段表' "-GuardSource 下找不到 internal\facts\local.go：$GuardSource" }
+elseif ($guardRangeFile) {
   $scriptRanges = @([regex]::Matches([IO.File]::ReadAllText((Join-Path $envRoot 'Anthropic网段直连阻断.ps1')), "RuleName = '([^']+)'; Cidr = '([^']+)'") | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value)" } | Sort-Object)
   $guardRanges = @([regex]::Matches([IO.File]::ReadAllText($guardRangeFile), 'RuleID: `([^`]+)`, CIDR: "([^"]+)"') | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value)" } | Sort-Object)
   if (-not $scriptRanges -or (Compare-Object $scriptRanges $guardRanges)) { Add-Result FAIL '卫士网段表' "网段脚本：$($scriptRanges -join '、')；卫士 local.go：$($guardRanges -join '、')；改网段后要同步卫士并重新打包" }

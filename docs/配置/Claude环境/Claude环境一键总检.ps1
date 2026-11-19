@@ -5,8 +5,8 @@ param(
   [ValidateSet('All','Guard')][string] $Scope = 'All',
   # 环境卫士「深度总检」按钮用：结果另写一份 JSON（字段：ok、pass、warn、fail、manual、results）；不传时行为不变。
   [string] $ResultPath,
-  # 日常使用的专用浏览器快捷方式，-OpenBrowser 打开它；其他专用浏览器只检查不打开。
-  [string] $DailyBrowser = 'Claude-账号1-专用Chrome.lnk'
+  # 日常使用的专用浏览器快捷方式文件名，-OpenBrowser 打开它；其他专用浏览器只检查不打开。不传时用部署清单的「日常浏览器」。
+  [string] $DailyBrowser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -198,8 +198,17 @@ if ($Scope -eq 'All') {
   # 专用浏览器按 读部署清单.ps1 里的同一条规则认（桌面上 --user-data-dir 指向 ClaudeAccountBrowsers 的快捷方式），账号名从目录里取，不在脚本里写死。
   $browserEntries = @(Get-DeployBrowserShortcuts)
   $browserShortcuts = @($browserEntries | ForEach-Object Path)
-  $dailyBrowserPath = Join-Path $desktop $DailyBrowser
-  if ($dailyBrowserPath -notin $browserShortcuts) {
+  # 日常浏览器：参数优先；否则按清单「日常浏览器」别名找；清单没登记且只有一个专用浏览器时就用它。
+  if (-not $DailyBrowser) {
+    $dailyAlias = if ($deployManifest) { [string]$deployManifest.'日常浏览器' } else { '' }
+    $dailyEntry = if ($dailyAlias) { $browserEntries | Where-Object Alias -eq $dailyAlias | Select-Object -First 1 }
+                  elseif ($browserEntries.Count -eq 1) { $browserEntries[0] }
+    $DailyBrowser = if ($dailyEntry) { [IO.Path]::GetFileName($dailyEntry.Path) } else { '' }
+  }
+  $dailyBrowserPath = if ($DailyBrowser) { Join-Path $desktop $DailyBrowser } else { '' }
+  if (-not $DailyBrowser) {
+    Add-Result WARN '日常专用浏览器' '部署清单没登记日常浏览器：跑 工具\写部署清单.ps1 -DailyBrowser <别名> 登记一次'
+  } elseif ($dailyBrowserPath -notin $browserShortcuts) {
     Add-Result WARN $DailyBrowser '日常专用浏览器快捷方式不存在或没有指向 ClaudeAccountBrowsers'
   }
   $readyBrowser = $null

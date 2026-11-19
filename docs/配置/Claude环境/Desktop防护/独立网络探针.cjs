@@ -1,5 +1,7 @@
 'use strict';
 // 仅访问公开测试端点；不加载 Claude、账号资料或浏览器配置。
+// 第一个参数是 Claude Desktop 专用 HTTP 端口（应用直连防护管理.ps1 按部署清单传入）；不传时用默认 43867。
+const desktopPort = Number(process.argv[2]) || 43867;
 const net = require('node:net');
 const http = require('node:http');
 const tls = require('node:tls');
@@ -100,7 +102,7 @@ function proxy(port) {
     run('stunUdp4', stun),
     run('nativeDnsDefault', () => dns()),
     run('nativeDnsPublic', () => dns('1.1.1.1')),
-    run('localProxy', () => proxy(43867)),
+    run('localProxy', () => proxy(desktopPort)),
     run('absentProxy', () => proxy(43997))
   ]);
   process.stdout.write(JSON.stringify({ at: new Date().toISOString(), executable: process.execPath, results }));

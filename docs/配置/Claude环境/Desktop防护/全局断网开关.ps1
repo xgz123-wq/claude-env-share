@@ -1,5 +1,5 @@
 # 全局断网开关（照经验帖第 4 条，Windows 版）：只有走 TUN 的流量、本机回环和局域网能出网，其余一律拦。
-# $CorePaths 放行内核只认 Program Files 路径；Clash Verge 服务模式的内核在 ProgramData，不命中，所以关 TUN 后内核也被拦（2026-11-14 实测，用户要这个效果）。
+# $CorePaths 放行内核只认 Clash Verge 安装目录里的（默认 Program Files；不传时按 Get-ClashInstallDir 自动找）；Clash Verge 服务模式的内核在 ProgramData，不命中，所以关 TUN 后内核也被拦（2026-11-14 实测，用户要这个效果）。
 # Clash 崩溃、被退出、TUN 掉了时整台电脑上不了外网（局域网照常），不会有任何程序用本地网络直连。
 # 用法（pwsh 7）：
 #   -Action Status    只读，看开关装没装（不用管理员）；加 -Json 只输出一行结果、不写日志（一键总检和后台巡检调）
@@ -10,7 +10,7 @@
 # 结果写 %LOCALAPPDATA%\ClaudeNetworkGuard\全局断网开关\（最近结果.json、日志.log）。
 param(
   [ValidateSet('Status', 'Test', 'Install', 'Remove')][string] $Action = 'Status',
-  [string[]] $CorePaths = @('C:\Program Files\Clash Verge\verge-mihomo.exe', 'C:\Program Files\Clash Verge\verge-mihomo-alpha.exe'),
+  [string[]] $CorePaths,
   [string] $TunCidr = '198.18.0.0/16',
   [switch] $Json,
   [switch] $Pause
@@ -18,6 +18,11 @@ param(
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot '..\工具\读部署清单.ps1')
+. (Join-Path $PSScriptRoot '..\工具\Clash内核管道.ps1')
+if (-not $CorePaths) {
+  $clashDir = Get-ClashInstallDir
+  $CorePaths = @((Join-Path $clashDir 'verge-mihomo.exe'), (Join-Path $clashDir 'verge-mihomo-alpha.exe'))
+}
 
 $lanV4 = @('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', '224.0.0.0/4', '255.255.255.255/32')
 $lanV6 = @('fe80::/10', 'ff00::/8', 'fc00::/7')

@@ -1,9 +1,13 @@
 #requires -Version 7.0
 # 刷新本机部署清单 %LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json：端口从 Clash 运行配置抄，专用浏览器按桌面快捷方式登记，脚本根目录取本脚本所在项目。
 # 一键总检每次跑完调用；创建账号浏览器建完调用；也可单独运行。内容没变就不写；写时先写临时文件再改名。
+# 日常浏览器（一键总检 -OpenBrowser 打开的那个）：传 -DailyBrowser <别名> 时登记它；不传时沿用清单原值（别名还在才算），只有一个专用浏览器时自动选它。
 # 只读 Clash 运行配置里的 mixed-port 和两个 listener 端口，不输出其他内容；不改 Clash、不改 Claude 配置。
 [CmdletBinding()]
-param()
+param(
+  # 日常用的专用浏览器别名（ClaudeAccountBrowsers 下的目录名），例：账号1
+  [string] $DailyBrowser
+)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
@@ -35,12 +39,20 @@ $browsers = @(Get-DeployBrowserShortcuts | Where-Object Alias | Sort-Object Alia
   [ordered]@{ '别名' = $_.Alias; '数据目录' = $_.UserData; '快捷方式' = $_.Path }
 })
 
+$aliases = @($browsers | ForEach-Object { $_['别名'] })
+if ($DailyBrowser -and $DailyBrowser -notin $aliases) { throw "桌面上没有别名为「$DailyBrowser」的专用浏览器；现有：$($aliases -join '、')" }
+$daily = if ($DailyBrowser) { $DailyBrowser }
+  elseif ($deployManifest -and [string]$deployManifest.'日常浏览器' -in $aliases) { [string]$deployManifest.'日常浏览器' }
+  elseif ($aliases.Count -eq 1) { $aliases[0] }
+  else { '' }
+
 $content = [ordered]@{
   '格式版本'   = 1
   '更新时间'   = ''
   '端口'       = $ports
   '脚本根目录' = $projectRoot
   '专用浏览器' = $browsers
+  '日常浏览器' = $daily
 }
 
 # 比较时不看更新时间，内容没变就不写，免得每次总检都改文件。
@@ -59,5 +71,6 @@ if ($changed) {
   Path     = $deployManifestFile
   Source   = $portSource
   Ports    = ($ports.GetEnumerator() | ForEach-Object { '{0}={1}' -f $_.Key, $_.Value }) -join '，'
-  Browsers = @($browsers | ForEach-Object { $_['别名'] }) -join '、'
+  Browsers = $aliases -join '、'
+  Daily    = $daily
 }

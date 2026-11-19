@@ -6,6 +6,21 @@
 
 $script:clashPipeNameCache = $null
 
+# Clash Verge 安装目录：内核以 SYSTEM 身份跑，普通权限读不到它的路径，所以按「运行中的 clash-verge.exe 所在目录 → 卸载注册表 InstallLocation → 默认 C:\Program Files\Clash Verge」找。
+# 返回的是安装目录（不是服务模式放在 ProgramData 的内核副本）；全局断网开关只放行安装目录里的内核，关 TUN 后内核也被拦，靠的就是这一点。
+function Get-ClashInstallDir {
+  $gui = Get-Process -Name clash-verge -ErrorAction SilentlyContinue | Where-Object Path | Select-Object -First 1
+  if ($gui) { return (Split-Path $gui.Path -Parent) }
+  $keys = @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*')
+  $entry = Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'Clash Verge*' -and $_.InstallLocation } | Select-Object -First 1
+  if ($entry) {
+    $dir = ([string]$entry.InstallLocation).Trim('"', ' ')
+    if (Test-Path -LiteralPath $dir) { return $dir }
+  }
+  'C:\Program Files\Clash Verge'
+}
+
+
 function Test-ClashPipe([string] $Name) {
   $pipe = $null
   try {

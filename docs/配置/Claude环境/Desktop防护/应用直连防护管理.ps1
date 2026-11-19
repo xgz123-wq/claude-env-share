@@ -15,6 +15,7 @@ $reportName=if($Action -eq 'Verify'){'应用直连防护-Verify.json'}elseif($Ac
 $reportPath=Join-Path $PSScriptRoot $reportName
 $probePath=Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\claude-network-probe.exe'
 $probeScript=Join-Path $PSScriptRoot '独立网络探针.cjs'
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读部署清单.ps1')
 $probe4=[guid]'72eeed17-9129-4be6-a40d-72e9a1e05b34'
 $probe6=[guid]'8ba52bf3-c742-42bb-9c13-eb14ba66d2ea'
 $record=[ordered]@{At=(Get-Date -Format o);Action=$Action;Status='running';ClaudeLaunched=$false;GlobalNetworkChanged=$false}
@@ -34,7 +35,7 @@ function Select-Filter($filters) {
  @($filters|Select-Object Key,Layer,Id,Flags,NativeAppPath,Enabled,Persistent,ProviderIsNull,ExactAppIdCondition,NonLoopbackCondition,IsOwnedExactBlock)
 }
 function Invoke-Probe([string]$Executable) {
- $probeOutput=& $Executable $probeScript
+ $probeOutput=& $Executable $probeScript (Get-DeployPort Desktop)
  if($LASTEXITCODE -ne 0){throw '独立测试程序执行失败。'}
  return ($probeOutput|ConvertFrom-Json)
 }

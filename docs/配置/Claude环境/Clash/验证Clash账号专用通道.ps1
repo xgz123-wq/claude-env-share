@@ -11,7 +11,7 @@ $portBrowser = Get-DeployPort 浏览器
 
 $base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
 $runtime = Join-Path $base 'clash-verge.yaml'
-$core = 'C:\Program Files\Clash Verge\verge-mihomo.exe'
+$core = Join-Path (Get-ClashInstallDir) 'verge-mihomo.exe'
 $liveScript = Join-Path $base 'profiles\Script.js'
 $repoScript = Join-Path $PSScriptRoot 'Clash全局账号通道.js'
 

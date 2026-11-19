@@ -61,7 +61,7 @@
 - **先查网关**：`~/.claude/settings.json` 的 `env` 若有 `ANTHROPIC_BASE_URL` 指向第三方网关，Claude 域名规则对 Claude Code 不生效，先向用户说明再继续。
 - **订阅链接是高危信息**：部分订阅 URL 参数是 base64 编码的节点密钥；排查中不要打印，若已打印提醒用户不要外发终端记录。
 - **不代替用户**：不选节点、不登录账号、不读或输出订阅链接、节点密钥、Cookie、token。
-- **默认不启动**：Claude Desktop、Claude Code、浏览器；一键总检带 `-OpenBrowser` 会打开日常专用 Chrome（默认 `Claude-账号1-专用Chrome.lnk`，用 `-DailyBrowser` 换），先告知。
+- **默认不启动**：Claude Desktop、Claude Code、浏览器；一键总检带 `-OpenBrowser` 会打开日常专用 Chrome（部署清单的 `日常浏览器`；只有一个专用浏览器时自动选它，多个时跑 `工具/写部署清单.ps1 -DailyBrowser <别名>` 登记），先告知。
 - **Claude 规则只在一处**：加减规则只改 `Clash/Clash全局账号通道.js` 的规则清单，网段只改 `Anthropic网段直连阻断.ps1`，再跑 `工具/生成架构讲解.ps1`；用户当次确认后可复制到现场 `Script.js`，重载由用户做。
 - **目录层级不能变**：总检按「脚本目录往上 3 层 = 项目根」定位。
 - **docs 是唯一来源**：脚本、配置和防护状态 json 只在 `docs/配置/Claude环境/`；文档也只在这里，不建 Skill。
