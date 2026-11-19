@@ -1,0 +1,11 @@
+# 换行统一：仓库里一律存 LF，工作区也用 LF；两边对比文件时不再出现整份不同的假差异。
+* text=auto eol=lf
+# Clash 全局脚本按哈希和现场 Script.js 比对，现场是 CRLF，这里保持 CRLF。
+*.js text eol=crlf
+# 给人用记事本看的说明保持 CRLF。
+*.txt text eol=crlf
+# 直连防护状态按哈希绑定这份清单，字节一个都不能动。
+应用过滤目标.json -text
+*.ico binary
+*.png binary
+*.lnk binary

@@ -1,12 +1,15 @@
 #requires -Version 7.0
 # 刷新本机部署清单 %LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json：端口从 Clash 运行配置抄，专用浏览器按桌面快捷方式登记，脚本根目录取本脚本所在项目。
 # 一键总检每次跑完调用；创建账号浏览器建完调用；也可单独运行。内容没变就不写；写时先写临时文件再改名。
+# 允许的出口国家：传 -ExitCountries US,GB 时改这一项；不传时沿用清单原值，没有就用示例默认值 US。
 # 日常浏览器（一键总检 -OpenBrowser 打开的那个）：传 -DailyBrowser <别名> 时登记它；不传时沿用清单原值（别名还在才算），只有一个专用浏览器时自动选它。
 # 只读 Clash 运行配置里的 mixed-port 和两个 listener 端口，不输出其他内容；不改 Clash、不改 Claude 配置。
 [CmdletBinding()]
 param(
   # 日常用的专用浏览器别名（ClaudeAccountBrowsers 下的目录名），例：账号1
-  [string] $DailyBrowser
+  [string] $DailyBrowser,
+  # 允许的出口国家（两位大写国家代码），例：US 或 US,GB；不传时沿用清单原值，没有就用示例默认值 US
+  [string[]] $ExitCountries
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -46,6 +49,12 @@ $daily = if ($DailyBrowser) { $DailyBrowser }
   elseif ($aliases.Count -eq 1) { $aliases[0] }
   else { '' }
 
+if ($ExitCountries) {
+  $ExitCountries = @($ExitCountries | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim().ToUpperInvariant() } | Where-Object { $_ } | Select-Object -Unique)
+  if (-not (Test-DeployCountryList $ExitCountries)) { throw "-ExitCountries 要写两位国家代码，例：US 或 US,GB；收到：$($ExitCountries -join ',')" }
+}
+$countries = if ($ExitCountries) { $ExitCountries } else { Get-DeployExitCountries }
+
 $content = [ordered]@{
   '格式版本'   = 1
   '更新时间'   = ''
@@ -53,6 +62,7 @@ $content = [ordered]@{
   '脚本根目录' = $projectRoot
   '专用浏览器' = $browsers
   '日常浏览器' = $daily
+  '允许的出口国家' = @($countries)
 }
 
 # 比较时不看更新时间，内容没变就不写，免得每次总检都改文件。
@@ -73,4 +83,5 @@ if ($changed) {
   Ports    = ($ports.GetEnumerator() | ForEach-Object { '{0}={1}' -f $_.Key, $_.Value }) -join '，'
   Browsers = $aliases -join '、'
   Daily    = $daily
+  Countries = $countries -join ','
 }

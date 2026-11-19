@@ -40,6 +40,19 @@ function Get-DeployPort {
   [int]$fallback
 }
 
+# 允许的出口国家：Claude 眼里出口 IP 的国家代码（claude.ai/cdn-cgi/trace 的 loc），默认只有 US。
+# 给以后换出口留的后路：换节点国家时跑 写部署清单.ps1 -ExitCountries US,GB 改这一项，启动器、巡检、总检、部署验收都按它判，不用改脚本。
+function Test-DeployCountryList($Value) {
+  $list = @($Value | Where-Object { $_ })
+  $list.Count -gt 0 -and -not @($list | Where-Object { [string]$_ -cnotmatch '^[A-Z]{2}$' })
+}
+function Get-DeployExitCountries {
+  foreach ($source in @($deployManifest, $deployDefaults)) {
+    if ($source -and (Test-DeployCountryList $source.'允许的出口国家')) { return @($source.'允许的出口国家' | ForEach-Object { [string]$_ }) }
+  }
+  @('US')
+}
+
 # 专用浏览器的认定规则只在这里写一处，一键总检和写部署清单共用：
 # 当前用户桌面上，参数里含 %LOCALAPPDATA%\ClaudeAccountBrowsers\<别名>\UserData 的 .lnk。
 # 环境卫士另外会把名字带 Claude、或走浏览器端口的非标准目录也列出来查，那些不进清单。

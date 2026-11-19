@@ -1,6 +1,6 @@
 #requires -Version 7.0
 # Claude Desktop 英文启动器（桌面「Claude-英文浏览器」；环境卫士按 -CheckOnly 调）：查 Desktop 版本与直连防护、固定代理、Clash 路由、
-# Desktop 端口归属与出口（Claude 眼里须是 US），全过才以 en-US 启动；关掉本窗口即退出 Claude。
+# Desktop 端口归属与出口（Claude 眼里的国家须在部署清单「允许的出口国家」里，默认 US），全过才以 en-US 启动；关掉本窗口即退出 Claude。
 # 不用管理员；-CheckOnly 只检查不启动。Claude 已在运行时拒绝（已有进程不会重新加载语言参数）。
 [CmdletBinding()]
 param(
@@ -229,8 +229,9 @@ try {
     if (-not $trace.Succeeded) {
         throw "$expectedPort 虽已监听，但经它连不上 Claude（claude.ai/cdn-cgi/trace），已拒绝启动 Claude。"
     }
-    if ($trace.Loc -ne 'US') {
-        throw "$expectedPort 出口在 Claude 眼里是 $($trace.Loc)，不是 US，已拒绝启动 Claude；检查 ACCOUNT-US 选的节点。"
+    $allowedCountries = Get-DeployExitCountries
+    if ($trace.Loc -notin $allowedCountries) {
+        throw "$expectedPort 出口在 Claude 眼里是 $($trace.Loc)，不在允许的出口国家（$($allowedCountries -join '、')）里，已拒绝启动 Claude；检查 ACCOUNT-US 选的节点。"
     }
     Write-Pass "$expectedPort 代理连通，Claude 看到的出口：$($trace.IP)（$($trace.Loc)）"
 

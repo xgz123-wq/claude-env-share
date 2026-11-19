@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot '读部署清单.ps1')
+$allowedCountries = Get-DeployExitCountries
 . (Join-Path $PSScriptRoot 'Clash内核管道.ps1')
 foreach ($v in 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'NO_PROXY', 'no_proxy') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
 $group = 'ACCOUNT-US'
@@ -75,8 +76,8 @@ foreach ($r in $r4) {
 }
 $gtm = Invoke-TunProbe 'www.googletagmanager.com' 'https://www.googletagmanager.com/'
 $uniqueIps = @($ips | Where-Object { $_ } | Sort-Object -Unique).Count
-$ok4 = -not @($r4 | Where-Object { -not ($_.Caught -and $_.Group -eq $group) }) -and $uniqueIps -eq 1 -and -not @($countries | Where-Object { $_ -ne 'US' }) -and $countries -and $gtm.Group -ne 'DIRECT'
-Add-Result $(if ($ok4) { 'PASS' } else { 'FAIL' }) '4 海外全走出口组，出口 IP 只有一个，国家 US' ((($r4 | ForEach-Object { Format-Probe $_ }) -join '；') + ('；返回 IP 的 {0} 次里不同 IP {1} 个；国家 {2}；googletagmanager → {3}' -f @($ips).Count, $uniqueIps, (($countries | Sort-Object -Unique) -join ','), $(if ($gtm.Caught) { $gtm.Group } else { '被拦截规则拦下（没有建立连接）' })))
+$ok4 = -not @($r4 | Where-Object { -not ($_.Caught -and $_.Group -eq $group) }) -and $uniqueIps -eq 1 -and -not @($countries | Where-Object { $_ -notin $allowedCountries }) -and $countries -and $gtm.Group -ne 'DIRECT'
+Add-Result $(if ($ok4) { 'PASS' } else { 'FAIL' }) ('4 海外全走出口组，出口 IP 只有一个，国家在 {0}' -f ($allowedCountries -join '/')) ((($r4 | ForEach-Object { Format-Probe $_ }) -join '；') + ('；返回 IP 的 {0} 次里不同 IP {1} 个；国家 {2}；googletagmanager → {3}' -f @($ips).Count, $uniqueIps, (($countries | Sort-Object -Unique) -join ','), $(if ($gtm.Caught) { $gtm.Group } else { '被拦截规则拦下（没有建立连接）' })))
 
 # 5. DNS：系统解析随机子域名拿到 fake-ip
 $dns = foreach ($i in 1..3) {

@@ -41,6 +41,7 @@ if ($Scope -eq 'All') {
 . (Join-Path $PSScriptRoot '工具\读部署清单.ps1')
 $runtime = $deployClashRuntime
 $portCli = Get-DeployPort 通用
+$allowedCountries = Get-DeployExitCountries
 $portBrowser = Get-DeployPort 浏览器
 $portDesktop = Get-DeployPort Desktop
 $expectedDesktopProxy = "http://127.0.0.1:$portDesktop"
@@ -138,8 +139,10 @@ if ($Scope -eq 'All') {
     @{Name="Claude Chrome $portBrowser";Value=$exit66},
     @{Name="Claude Desktop $portDesktop";Value=$exit67}
   )) {
-    if ($entry.Value.Succeeded) {
+    if ($entry.Value.Succeeded -and $entry.Value.Loc -in $allowedCountries) {
       Add-Result PASS $entry.Name ("Claude 看到的出口：{0}（{1}）" -f $entry.Value.IP, $entry.Value.Loc)
+    } elseif ($entry.Value.Succeeded) {
+      Add-Result FAIL $entry.Name ("Claude 看到的国家是 {0}，不在部署清单「允许的出口国家」（{1}）里；可能在直连或节点不对" -f $entry.Value.Loc, ($allowedCountries -join '、'))
     } else {
       Add-Result FAIL $entry.Name '经这个入口访问 claude.ai 拿不到出口 IP'
     }

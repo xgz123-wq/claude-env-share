@@ -16,3 +16,6 @@ Desktop.ini
 .DS_Store
 __pycache__/
 *.pyc
+
+# Chrome 类程序在当前目录留下的崩溃日志等，和脚本无关
+*.log

@@ -2,7 +2,7 @@
 # 后台出口巡检（只读）：计划任务每隔几分钟调一次，发现 Claude 流量可能直连就弹窗提醒；只提醒，不改防火墙、Clash，也不关 Claude。
 # 背景：环境卫士和一键总检要人手动点才查；2026-11-10 误切 Clash 全局（GLOBAL=DIRECT）时直连了一段时间才被发现。思路参考 Claude-Cage 的后台定时核对。
 # 查三类：
-#   出口：三个专用端口各经 claude.ai/cdn-cgi/trace 看 Claude 眼里的国家，不是预期国家（默认 US）就报警；只问 Claude 自己，不访问第三方测 IP 站。
+#   出口：三个专用端口各经 claude.ai/cdn-cgi/trace 看 Claude 眼里的国家，不在部署清单「允许的出口国家」里（默认 US）就报警；只问 Claude 自己，不访问第三方测 IP 站。
 #   Clash 模式：直连模式，或全局模式下 GLOBAL 没选 ACCOUNT-US，报警。
 #   防火墙：调同目录上一层的 Anthropic网段直连阻断.ps1（总开关 + 两条网段规则）。
 #   全局断网开关：调 ..\Desktop防护\全局断网开关.ps1 -Action Status -Json，9 条常驻过滤不全就报警（用急救命令解除后忘了重装）。
@@ -23,7 +23,8 @@ param(
   [Parameter(ParameterSetName = 'Install')][ValidateRange(1, 60)][int] $IntervalMinutes = 5,
   [Parameter(ParameterSetName = 'Uninstall')][switch] $Uninstall,
   [Parameter(ParameterSetName = 'Status')][switch] $Status,
-  [Parameter(ParameterSetName = 'Run')][string] $ExpectedLoc = 'US',
+  # 不传时用部署清单「允许的出口国家」
+  [Parameter(ParameterSetName = 'Run')][string[]] $ExpectedLoc,
   [Parameter(ParameterSetName = 'Run')][string] $SimulateLoc,
   [Parameter(ParameterSetName = 'Run')][switch] $SimulateFirewallOff,
   [Parameter(ParameterSetName = 'Run')][switch] $NoPopup
@@ -95,6 +96,7 @@ New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
 . (Join-Path $PSScriptRoot '读部署清单.ps1')
 . (Join-Path $PSScriptRoot 'Clash内核管道.ps1')
 . (Join-Path $PSScriptRoot '测Claude出口.ps1')
+$ExpectedLoc = if ($ExpectedLoc) { @($ExpectedLoc | ForEach-Object { $_ -split "," } | ForEach-Object { $_.Trim().ToUpperInvariant() } | Where-Object { $_ }) } else { Get-DeployExitCountries }
 
 $items = [System.Collections.Generic.List[object]]::new()
 function Add-Item([ValidateSet('PASS', 'WARN', 'FAIL')][string] $State, [string] $Item, [string] $Evidence, [string] $IP = '') {
@@ -118,7 +120,7 @@ foreach ($exit in $exits) {
   $loc = if ($SimulateLoc) { $SimulateLoc } else { $r.Loc }
   $label = "出口：$($exit.Name) $($exit.Port)"
   if (-not $r.IP) { Add-Item WARN $label '连不上 Claude（Clash 没开或线路慢）；不会因此直连，只是暂时用不了' }
-  elseif ($loc -ne $ExpectedLoc) { Add-Item FAIL $label "Claude 看到的国家是 $loc（IP $($r.IP)），应为 $ExpectedLoc；可能在直连或节点不对" $r.IP }
+  elseif ($loc -notin $ExpectedLoc) { Add-Item FAIL $label "Claude 看到的国家是 $loc（IP $($r.IP)），应为 $($ExpectedLoc -join '/')；可能在直连或节点不对" $r.IP }
   else { Add-Item PASS $label "$loc（IP $($r.IP)）" $r.IP }
 }
 
