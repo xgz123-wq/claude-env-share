@@ -5,6 +5,8 @@
 # 找到后在本脚本内缓存；找不到就抛异常并列出试过的名字。实测首次约 0.08 秒。
 
 $script:clashPipeNameCache = $null
+# 运行配置路径从部署清单的公共文件取；调用方没点源它时这里补上。
+if (-not $deployClashRuntime) { . (Join-Path $PSScriptRoot '读部署清单.ps1') }
 
 # Clash Verge 安装目录：内核以 SYSTEM 身份跑，普通权限读不到它的路径，所以按「运行中的 clash-verge.exe 所在目录 → 卸载注册表 InstallLocation → 默认 C:\Program Files\Clash Verge」找。
 # 返回的是安装目录（不是服务模式放在 ProgramData 的内核副本）；全局断网开关只放行安装目录里的内核，关 TUN 后内核也被拦，靠的就是这一点。
@@ -43,7 +45,7 @@ function Test-ClashPipe([string] $Name) {
 function Get-ClashPipeName {
   if ($script:clashPipeNameCache) { return $script:clashPipeNameCache }
   $configName = $null
-  $configFile = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev\clash-verge.yaml'
+  $configFile = $deployClashRuntime
   if (Test-Path -LiteralPath $configFile) {
     $line = Select-String -LiteralPath $configFile -Pattern '^\s*external-controller-pipe:\s*(.+?)\s*$' | Select-Object -First 1
     if ($line) { $configName = ($line.Matches[0].Groups[1].Value.Trim('''"') -replace '^\\\\\.\\pipe\\', '') }

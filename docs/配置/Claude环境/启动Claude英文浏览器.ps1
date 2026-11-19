@@ -1,4 +1,7 @@
 #requires -Version 7.0
+# Claude Desktop 英文启动器（桌面「Claude-英文浏览器」；环境卫士按 -CheckOnly 调）：查 Desktop 版本与直连防护、固定代理、Clash 路由、
+# Desktop 端口归属与出口（Claude 眼里须是 US），全过才以 en-US 启动；关掉本窗口即退出 Claude。
+# 不用管理员；-CheckOnly 只检查不启动。Claude 已在运行时拒绝（已有进程不会重新加载语言参数）。
 [CmdletBinding()]
 param(
     [switch]$CheckOnly
@@ -9,6 +12,8 @@ $ErrorActionPreference = 'Stop'
 
 # Desktop 专用端口按名字从部署清单取（源头是 Clash全局账号通道.js 的 claude-desktop-http）。
 . (Join-Path $PSScriptRoot '工具\读部署清单.ps1')
+# 出口只问 Claude 自己（claude.ai/cdn-cgi/trace），和总检、巡检、通道验证共用一份。
+. (Join-Path $PSScriptRoot '工具\测Claude出口.ps1')
 $expectedPort = Get-DeployPort Desktop
 $expectedProxy = "http://127.0.0.1:$expectedPort"
 $guardDirectory = Join-Path $PSScriptRoot 'Desktop防护'
@@ -17,7 +22,7 @@ $guardStatePath = Join-Path $guardDirectory '应用直连防护状态.json'
 $guardVerifyPath = Join-Path $guardDirectory '应用直连防护-Verify.json'
 $guardInstallPath = Join-Path $guardDirectory '应用直连防护-最近操作.json'
 $configRoot = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
-$clashRuntime = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev\clash-verge.yaml'
+$clashRuntime = $deployClashRuntime
 
 function Write-Pass {
     param([string]$Message)
@@ -220,12 +225,14 @@ try {
     if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
         throw '找不到 curl.exe，无法验证专用代理是否真正可用。'
     }
-    $proxyOutput = (& curl.exe -sS --max-time 10 --proxy $expectedProxy https://api.ipify.org 2>$null | Out-String).Trim()
-    $parsedIp = $null
-    if ($LASTEXITCODE -ne 0 -or -not [Net.IPAddress]::TryParse($proxyOutput, [ref]$parsedIp)) {
-        throw "$expectedPort 虽已监听，但无法通过它取得有效公网出口，已拒绝启动 Claude。"
+    $trace = Get-ClaudeTrace -Type http -Port $expectedPort -Attempts 2
+    if (-not $trace.Succeeded) {
+        throw "$expectedPort 虽已监听，但经它连不上 Claude（claude.ai/cdn-cgi/trace），已拒绝启动 Claude。"
     }
-    Write-Pass "$expectedPort 代理连通，出口：$proxyOutput"
+    if ($trace.Loc -ne 'US') {
+        throw "$expectedPort 出口在 Claude 眼里是 $($trace.Loc)，不是 US，已拒绝启动 Claude；检查 ACCOUNT-US 选的节点。"
+    }
+    Write-Pass "$expectedPort 代理连通，Claude 看到的出口：$($trace.IP)（$($trace.Loc)）"
 
     if ($CheckOnly) {
         Write-Host '结论：启动前检查全部通过；本次只检查，没有启动 Claude。' -ForegroundColor Cyan

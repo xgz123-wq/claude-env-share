@@ -39,7 +39,7 @@ try { $cfg = Invoke-ClashApi '/configs'; $rules = @((Invoke-ClashApi '/rules').r
 catch { Add-Result FAIL 'Clash 内核接口' ('读不到：' + $_.Exception.Message + '；Clash Verge 开着吗？'); exit 1 }
 
 # 1. 模式、虚拟网卡、自启、IPv6、系统代理
-$verge = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev\verge.yaml'
+$verge = Join-Path $deployClashDataDir 'verge.yaml'
 $vergeKeys = @{}
 if (Test-Path -LiteralPath $verge) { Select-String -LiteralPath $verge -Pattern '^(enable_auto_launch|enable_system_proxy):\s*(\S+)' | ForEach-Object { $vergeKeys[$_.Matches[0].Groups[1].Value] = $_.Matches[0].Groups[2].Value } }
 $ok1 = $cfg.mode -eq 'rule' -and $cfg.tun.enable -and -not $cfg.ipv6 -and $vergeKeys.enable_auto_launch -eq 'true' -and $vergeKeys.enable_system_proxy -ne 'true'

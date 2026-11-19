@@ -1,4 +1,6 @@
 #requires -Version 7.0
+# Claude Desktop 安装包底层操作（由一键更新调用）：-Action Inspect 审核官方 MSIX（签名、发布者、声明、SHA256），只读；
+# -Action Apply 按审核指纹 Stage、给新路径预加直连防护、Register，要管理员，本脚本不自行提权。
 [CmdletBinding()]
 param(
     [ValidateSet('Inspect','Apply')][string]$Action = 'Inspect',

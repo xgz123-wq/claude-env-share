@@ -1,4 +1,7 @@
 #requires -Version 7.0
+# 建一个账号专用 Chrome：独立数据目录 %LOCALAPPDATA%\ClaudeAccountBrowsers\<别名>\UserData，桌面快捷方式带浏览器 SOCKS 端口、远端 DNS、en-US、
+# WebRTC 防旁路参数，建完登记进部署清单。快捷方式已存在或数据目录非空就停止，不覆盖。
+# 用法：-Alias <别名> [-ShortcutName <名>] [-StartUrl <网址>] [-Launch]；不用管理员，不改 Chrome 全局设置。
 param(
   [Parameter(Mandatory)]
   [ValidatePattern('^[\p{L}\p{N}_-]{1,40}$')]

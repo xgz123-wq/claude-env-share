@@ -1,4 +1,7 @@
 #requires -Version 7.0
+# 应用直连防护（WFP）：给 应用过滤目标.json 登记的 4 个 Claude 程序加「非回环出站一律拦、连本机代理放行」的规则，并用独立探针验证拦得住。
+# 动作：Verify（默认，核验规则与指纹）、Test、Install、Rollback、Refresh（同路径换指纹）、MigratePlugin（插件换目录）；读写 WFP 规则都要管理员。
+# Claude 在运行就停止，不启动也不结束 Claude；结果写本目录的 应用直连防护-*.json。
 param(
  [ValidateSet('Test','Install','Verify','Rollback','Refresh','MigratePlugin')][string]$Action='Verify',
  # Refresh 只适用于路径、Desktop 版本均未变化；必须显式传入人工核对过的目标哈希（按清单顺序）。

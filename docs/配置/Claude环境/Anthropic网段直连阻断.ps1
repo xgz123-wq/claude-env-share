@@ -1,4 +1,7 @@
 #requires -Version 7.0
+# Anthropic 网段直连阻断：用 Windows 防火墙出站规则拦任何程序直连 160.79.104.0/23、153.61.224.0/22（网段只在下面 $ranges 维护）。
+# 用法（pwsh 7）：-Action Check（默认，只读，不用管理员；加 -Json 只输出一行结果，总检调）；-Action Install 要管理员，已存在且正确的跳过，同名但配置不符就停止不覆盖。
+# 没有卸载动作：回滚时管理员删两条 Claude-Anthropic-Direct-Block-* 规则。
 [CmdletBinding()]
 param(
   [ValidateSet('Check','Install')][string] $Action = 'Check',

@@ -1,3 +1,6 @@
+# Clash 账号通道验证（一键总检第一步调它，也可单独跑）：核对运行配置里的 ACCOUNT-US 组、两个 listener、Claude 规则与 JS 一致且内核已加载、现场 Script.js 同步，
+# 用内核 -t 校验配置，经浏览器端口取 Claude trace，绕过代理访问飞书看国内直连。输出一个 JSON 对象给总检读。
+# 只读：不改 Clash、不重载、不用管理员。用法：pwsh -NoProfile -File <本脚本>
 $ErrorActionPreference = 'Stop'
 
 # 端口按名字从部署清单取（通用 = Clash 混合端口，浏览器 = 专用 Chrome 的 SOCKS）；检查项名字里的 43865 / 43866 是固定字段名，不随端口变。
@@ -6,11 +9,13 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\Clash内核管道.ps1')
 # 规则清单只在 Clash全局账号通道.js，这里读出来和内核实际加载的比，不另抄一份。
 . (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\读Claude规则.ps1')
+# 出口只问 Claude 自己，和总检、巡检、启动器共用一份。
+. (Join-Path (Split-Path $PSScriptRoot -Parent) '工具\测Claude出口.ps1')
 $portCli = Get-DeployPort 通用
 $portBrowser = Get-DeployPort 浏览器
 
-$base = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
-$runtime = Join-Path $base 'clash-verge.yaml'
+$base = $deployClashDataDir
+$runtime = $deployClashRuntime
 $core = Join-Path (Get-ClashInstallDir) 'verge-mihomo.exe'
 $liveScript = Join-Path $base 'profiles\Script.js'
 $repoScript = Join-Path $PSScriptRoot 'Clash全局账号通道.js'
@@ -77,18 +82,10 @@ $validation = @(& $core -t -d $base -f $runtime 2>&1)
 $validationExit = $LASTEXITCODE
 
 # 取 Claude 自己的 trace，一次同时证明能到 claude.ai、拿到 Claude 看到的出口 IP。TUN 空闲后第一个 SOCKS 连接握手偏慢，单次 20 秒超时会产生假失败，故重试一次。
-$socksIp = ''
-$socksLoc = ''
-$claudeStatus = '000'
-for ($attempt = 1; $attempt -le 2; $attempt++) {
-  $trace = (curl.exe --silent --show-error --max-time 20 --write-out 'http=%{http_code}' --socks5-hostname 127.0.0.1:$portBrowser https://claude.ai/cdn-cgi/trace 2>$null | Out-String)
-  $claudeExit = $LASTEXITCODE
-  if ($trace -match '(?m)^ip=(\S+)') { $socksIp = $Matches[1] }
-  if ($trace -match '(?m)^loc=(\S+)') { $socksLoc = $Matches[1] }
-  if ($trace -match 'http=(\d+)') { $claudeStatus = $Matches[1] }
-  if ($claudeExit -eq 0 -and $claudeStatus -ne '000') { break }
-  if ($attempt -eq 1) { Start-Sleep -Seconds 3 }
-}
+$socksTrace = Get-ClaudeTrace -Type socks5h -Port $portBrowser -TimeoutSeconds 20 -Attempts 2
+$socksIp = $socksTrace.IP
+$socksLoc = $socksTrace.Loc
+$claudeStatus = $socksTrace.Http
 $feishuStatus = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' --max-time 20 --noproxy '*' https://www.feishu.cn/
 $feishuExit = $LASTEXITCODE
 
@@ -159,7 +156,7 @@ $checks = [ordered]@{
   AccountNodeSelected =($null -ne $account -and -not [string]::IsNullOrWhiteSpace($account.now))
   MihomoConfigValid = ($validationExit -eq 0)
   SocksHasPublicIp = ($socksIp -match '^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F:]+)$')
-  ClaudeReachableThroughSocks = ($claudeExit -eq 0 -and $claudeStatus -ne '000')
+  ClaudeReachableThroughSocks = ($socksTrace.Succeeded -and $claudeStatus -ne '000')
   FeishuReachable = ($feishuExit -eq 0 -and $feishuStatus -match '^[23]')
 }
 $failed = @($checks.GetEnumerator() | Where-Object { -not $_.Value } | ForEach-Object Key)

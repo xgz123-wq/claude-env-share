@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '读部署清单.ps1')
 
 $projectRoot = Split-Path (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent) -Parent
-$clashRuntime = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev\clash-verge.yaml'
+$clashRuntime = $deployClashRuntime
 
 # Clash 是端口的源头：混合端口 = 通用；account-us-socks = 浏览器；claude-desktop-http = Desktop（名字由 Clash全局账号通道.js 定义）。
 $clashPorts = @{}

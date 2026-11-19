@@ -7,6 +7,9 @@
 $deployManifestFile = Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\部署清单.json'
 $deployExampleFile = Join-Path (Split-Path $PSScriptRoot -Parent) '部署清单.示例.json'
 $deployBrowserRoot = Join-Path $env:LOCALAPPDATA 'ClaudeAccountBrowsers'
+# Clash Verge 的数据目录（运行配置 clash-verge.yaml、界面设置 verge.yaml、profiles\ 都在这里）；各脚本只从这两个变量取，不再各写一遍。
+$deployClashDataDir = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev'
+$deployClashRuntime = Join-Path $deployClashDataDir 'clash-verge.yaml'
 
 function Read-DeployJson([string] $Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return $null }

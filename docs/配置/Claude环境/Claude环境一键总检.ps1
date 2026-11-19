@@ -1,3 +1,7 @@
+# Claude / Clash 环境一键总检（桌面「Claude-环境一键总检」、环境卫士「深度总检」都调它）：Clash 规则与出口、三个入口、专用浏览器、Desktop 策略、
+# 直连防护、网段阻断、全局断网开关、实际连接、hosts，一项一行 PASS / WARN / FAIL / MANUAL。
+# 只读：不改 Clash、不启动 Claude、不用管理员；唯一会写的是按 Clash 刷新部署清单（内容没变不写）。-OpenBrowser 会打开日常专用浏览器，先告知用户。
+# 用法：pwsh -NoProfile -File <本脚本> [-OpenBrowser] [-Scope All|Guard] [-ResultPath <json>] [-DailyBrowser <快捷方式文件名>]
 [CmdletBinding()]
 param(
   [switch] $OpenBrowser,
@@ -14,7 +18,6 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
 $validator = Join-Path $projectRoot 'docs\配置\Claude环境\Clash\验证Clash账号专用通道.ps1'
-$runtime = Join-Path $env:APPDATA 'io.github.clash-verge-rev.clash-verge-rev\clash-verge.yaml'
 $desktop = [Environment]::GetFolderPath('Desktop')
 $guardManifest = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用过滤目标.json'
 $guardState = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用直连防护状态.json'
@@ -36,6 +39,7 @@ if ($Scope -eq 'All') {
   }
 }
 . (Join-Path $PSScriptRoot '工具\读部署清单.ps1')
+$runtime = $deployClashRuntime
 $portCli = Get-DeployPort 通用
 $portBrowser = Get-DeployPort 浏览器
 $portDesktop = Get-DeployPort Desktop
@@ -54,24 +58,14 @@ function Add-Result {
   $results.Add([pscustomobject]@{Status=$Status;Item=$Item;Evidence=$Evidence})
 }
 
+# 出口只问 Claude 自己（claude.ai/cdn-cgi/trace），和巡检、启动器、通道验证共用一份；失败再试一次（线路慢时偶发握手超时）。
+. (Join-Path $PSScriptRoot '工具\测Claude出口.ps1')
 function Test-ProxyExit {
   param(
     [ValidateSet('http','socks5h')][string] $Type,
     [int] $Port
   )
-  $arguments = @('-sS','--max-time','12')
-  if ($Type -eq 'socks5h') {
-    $arguments += @('--socks5-hostname', "127.0.0.1:$Port")
-  } else {
-    $arguments += @('--proxy', "http://127.0.0.1:$Port")
-  }
-  # 取 Claude 自己的 trace，而不是第三方测 IP 站：通用入口按规则分流，只有访问 Claude 域名才走 ACCOUNT-US，测别的站测到的是兜底组（Proxy）。
-  $arguments += 'https://claude.ai/cdn-cgi/trace'
-  $body = (& curl.exe @arguments 2>$null | Out-String)
-  $exitCode = $LASTEXITCODE
-  $ip = if ($body -match '(?m)^ip=(\S+)') { $Matches[1] } else { '' }
-  $loc = if ($body -match '(?m)^loc=(\S+)') { $Matches[1] } else { '' }
-  [pscustomobject]@{Succeeded=($exitCode -eq 0 -and [bool]$ip);IP=$ip;Loc=$loc}
+  Get-ClaudeTrace -Type $Type -Port $Port -Attempts 2
 }
 
 # 直连防护凭证判定和英文启动器共用一份。

@@ -18,7 +18,7 @@ function Add-Result([ValidateSet('PASS','WARN','FAIL')][string]$Status, [string]
 }
 function Get-Relative([string]$Path) { [IO.Path]::GetRelativePath($projectRoot, $Path) }
 
-$scripts = @(Get-ChildItem -LiteralPath $envRoot -Recurse -File -Filter '*.ps1' | Where-Object { $_.FullName -notmatch '\\历史\\' })
+$scripts = @(Get-ChildItem -LiteralPath $envRoot -Recurse -File -Filter '*.ps1')
 
 # 1. 语法
 $parseErrors = foreach ($s in $scripts) {
@@ -86,6 +86,7 @@ $required = @(
   '工具\读Claude规则.ps1'
   '工具\生成架构讲解.ps1'
   '工具\后台出口巡检.ps1'
+  '工具\测Claude出口.ps1'
   '说明\架构讲解.html'
   '说明\断网急救.txt'
 )
@@ -122,8 +123,7 @@ foreach ($l in $scriptLinks) {
 
 # 6. 文档里的相对链接
 $docRoots = @($envRoot)
-$docs = @($docRoots | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter '*.md' } |
-  Where-Object { $_.FullName -notmatch '\\历史\\' })
+$docs = @($docRoots | Where-Object { Test-Path -LiteralPath $_ } | ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter '*.md' })
 $agents = Join-Path $projectRoot 'AGENTS.md'
 if (Test-Path -LiteralPath $agents) { $docs += Get-Item -LiteralPath $agents }
 $linkCount = 0

@@ -94,6 +94,7 @@ if ($Status) {
 New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
 . (Join-Path $PSScriptRoot '读部署清单.ps1')
 . (Join-Path $PSScriptRoot 'Clash内核管道.ps1')
+. (Join-Path $PSScriptRoot '测Claude出口.ps1')
 
 $items = [System.Collections.Generic.List[object]]::new()
 function Add-Item([ValidateSet('PASS', 'WARN', 'FAIL')][string] $State, [string] $Item, [string] $Evidence, [string] $IP = '') {
@@ -106,19 +107,11 @@ $exits = @(
   [pscustomobject]@{ Name = '专用 Chrome'; Type = 'socks5h'; Port = (Get-DeployPort 浏览器) }
   [pscustomobject]@{ Name = 'Claude Desktop'; Type = 'http'; Port = (Get-DeployPort Desktop) }
 )
+$traceFunction = ${function:Get-ClaudeTrace}.ToString()
 $exitResults = $exits | ForEach-Object -ThrottleLimit 3 -Parallel {
-  $arguments = @('-sS', '--max-time', '12')
-  if ($_.Type -eq 'socks5h') { $arguments += @('--socks5-hostname', "127.0.0.1:$($_.Port)") }
-  else { $arguments += @('--proxy', "http://127.0.0.1:$($_.Port)") }
-  $arguments += 'https://claude.ai/cdn-cgi/trace'
-  $ip = ''; $loc = ''
-  foreach ($attempt in 1..2) {
-    $body = (& curl.exe @arguments 2>$null | Out-String)
-    if ($body -match '(?m)^ip=(\S+)') { $ip = $Matches[1] }
-    if ($body -match '(?m)^loc=(\S+)') { $loc = $Matches[1] }
-    if ($ip) { break }
-  }
-  [pscustomobject]@{ Name = $_.Name; Port = $_.Port; IP = $ip; Loc = $loc }
+  ${function:Get-ClaudeTrace} = $using:traceFunction
+  $t = Get-ClaudeTrace -Type $_.Type -Port $_.Port -Attempts 2
+  [pscustomobject]@{ Name = $_.Name; Port = $_.Port; IP = $t.IP; Loc = $t.Loc }
 }
 foreach ($exit in $exits) {
   $r = $exitResults | Where-Object Name -eq $exit.Name | Select-Object -First 1

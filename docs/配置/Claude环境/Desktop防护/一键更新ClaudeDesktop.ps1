@@ -1,4 +1,7 @@
 #requires -Version 7.0
+# 一键更新 Claude Desktop（由 更新三端Claude.ps1 调用，一般不单独跑）：-Action Verify 只核验；-Action Update 按审核过的官方包和指纹迁移直连防护、
+# 安装 Desktop、刷新 CLI / 插件指纹，最后跑总检 -Scope Guard 并清理旧安装包。不是管理员时自己弹一次 UAC 起隐藏的管理员工作进程（-Worker）。
+# Claude 在运行就停止，不强杀、不启动 Claude。参数说明见 更新维护说明.md「脚本」表。
 [CmdletBinding()]
 param(
     [ValidateSet('Verify','Update')][string]$Action = 'Verify',

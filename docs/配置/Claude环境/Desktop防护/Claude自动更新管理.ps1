@@ -1,4 +1,6 @@
 #requires -Version 7.0
+# Claude Desktop 自动更新开关：在 HKLM（默认）或 HKCU 的 Policies\Claude 同一层写 disableAutoUpdates 和 egressProxyUrl=http://127.0.0.1:<Desktop 端口>。
+# 用法：-Action Status（默认，只读）；-Action Disable（关自动更新并写代理）；-Action Enable 会删掉同层代理策略，不要用。写 HKLM 时不是管理员会自己弹一次 UAC。
 [CmdletBinding()]
 param(
   [ValidateSet('Status','Disable','Enable')]
