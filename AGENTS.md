@@ -7,6 +7,7 @@
 
 | 要做什么 | 入口 |
 |---|---|
+| 整套要做成什么样、怎么算合格（规格 + 验收，不分平台） | `docs/配置/Claude环境/部署提示词.md` |
 | 了解整体、给用户解释 | 用户入口 `docs/配置/Claude环境/说明/架构讲解.html`；`README.md` |
 | 收到外部域名或网段 | `docs/配置/Claude环境/说明/排障与变更.md` 第 7.3 节 |
 | 目录、代理路线 | `docs/配置/Claude环境/README.md` |
@@ -31,7 +32,7 @@
 | 6a 网段阻断 | 以管理员运行 `pwsh -File docs/配置/Claude环境/Anthropic网段直连阻断.ps1 -Action Install`，阻断 `160.79.104.0/23`、`153.61.224.0/22` 的直接出站；再用默认只读模式核对 | `docs/配置/Claude环境/说明/排障与变更.md`「三道断网开关」 |
 | 6b 全局断网开关 | 先读 `排障与变更.md`「三道断网开关」里的后果（Clash/TUN 不在时整机无外网），用户同意后以管理员运行 `pwsh -File docs/配置/Claude环境/Desktop防护/全局断网开关.ps1 -Action Install`（先临时试装对比，通过才装常驻）；再 `-Action Status` 核对 9 条；急救用 `-Action Remove` | `docs/配置/Claude环境/说明/排障与变更.md`「三道断网开关」 |
 | 7 快捷方式 | 桌面建「Claude-环境一键总检」「Claude-英文浏览器」「Claude-三端更新」，目标为 PowerShell 7 加 `-File` 指向对应 docs 脚本；再建「Claude-系统架构」，目标为 `说明/架构讲解.html`；装了 6b 的再建「全局断网开关-安装」「全局断网开关-解除（断网急救）」（PowerShell 7 加 `-File` 指向 `Desktop防护/全局断网开关.ps1`，参数分别为 `-Action Install -Pause`、`-Action Remove -Pause`，不用勾管理员，脚本自己弹 UAC）和「断网急救说明」（目标 `说明/断网急救.txt`）；所有路径按本机分享包实际位置和 `pwsh` 实际路径填，不照抄别人的；各账号 Chrome 快捷方式第 4 步已建 | `docs/配置/Claude环境/说明/日常使用.md`「桌面入口与维护」 |
-| 8 验收 | 一键总检 0 FAIL；`docs/配置/Claude环境/工具/检查脚本完整性.ps1` 0 FAIL；用户肉眼核对检测站；把结果写进 `维护日志.md` | `docs/配置/Claude环境/Claude环境一键总检.ps1` |
+| 8 验收 | 按 `部署提示词.md`「怎么算做好了」逐项报结果：`工具/部署验收.ps1` 0 FAIL（第 1~9 项，只读）；用户退出 Claude 后跑 `工具/断网演练.ps1`，第 10、11 项通过；一键总检 0 FAIL；`工具/检查脚本完整性.ps1` 0 FAIL；用户肉眼核对检测站；把结果写进 `维护日志.md` | `docs/配置/Claude环境/部署提示词.md` |
 | 8a 环境卫士 | 把卫士最新版的两个 exe 下到安装目录，和分享包 clone 出来的文件夹放在一起（例如 exe 在 `D:\Tools\Claude环境\`，分享包在 `D:\Tools\Claude环境\claude-env-share\`）：`curl.exe -L --fail -o <目录>\ClaudeEnvGuard.exe https://github.com/xgz123-wq/ClaudeEnvGuard/releases/latest/download/ClaudeEnvGuard.exe`，`ceg.exe` 同理；`<目录>\ceg.exe version` 能输出版本号才算下好；再在桌面建「Claude 环境卫士」快捷方式，目标为 `<目录>\ClaudeEnvGuard.exe`、起始位置为 `<目录>`。卫士不用安装、不用填任何设置，第 9 步生成部署清单后它自己找到分享包 | 卫士 [README](https://github.com/xgz123-wq/ClaudeEnvGuard) |
 | 9 部署清单 | 最后再跑一次一键总检（顺带生成清单）：它从 Clash 运行配置读出三个端口、登记桌面上的专用浏览器，写进 `%LOCALAPPDATA%\ClaudeNetworkGuard\部署清单.json`；确认三个端口与 Clash 一致、每个专用浏览器都已登记。之后改端口只在 Clash 改，再跑一次总检 | `docs/配置/Claude环境/README.md`「部署清单」 |
 
@@ -49,7 +50,7 @@
 
 ## 维护工作流程（部署后）
 
-1. **先读现状**：`docs/配置/Claude环境/README.md` → `维护日志.md` 末尾 → 上表对应文档。
+1. **先读现状**：`docs/配置/Claude环境/部署提示词.md`（要求、验收、已接受的风险）→ `docs/配置/Claude环境/README.md` → `维护日志.md` 末尾 → 上表对应文档。
 2. **改前备份**：分享包本身是 git 仓库，改前 `git status` 确认干净，改完提交一次简短中文 commit，不再复制备份；仓库外的文件（Clash 配置、服务和注册表等）仍复制到 `%LOCALAPPDATA%\ClaudeNetworkGuard\<中文任务名>-<yyyyMMdd-HHmmss>\`。
 3. **改后验证**：一键总检 0 FAIL；动了脚本或文档再跑 `docs/配置/Claude环境/工具/检查脚本完整性.ps1`。
 4. **记录**：`维护日志.md` 只保留最近一轮的完整一节，上一轮压成「历史」表一行，不新建记录文件。
