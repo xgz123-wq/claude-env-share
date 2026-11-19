@@ -6,6 +6,7 @@
 #   -Action Test      管理员。临时装上（进程退出即自动消失）→ 对比测试 → 撤掉；不改任何常驻设置
 #   -Action Install   管理员。先跑 Test，通过才装常驻版；装完再测，不通过自动卸掉
 #   -Action Remove    管理员。一键解除（断网急救用）
+#   Test/Install/Remove 不是管理员时自己弹一次 UAC（桌面快捷方式就这样用）；Status 不提权。
 # 结果写 %LOCALAPPDATA%\ClaudeNetworkGuard\全局断网开关\（最近结果.json、日志.log）。
 param(
   [ValidateSet('Status', 'Test', 'Install', 'Remove')][string] $Action = 'Status',
@@ -33,6 +34,24 @@ function Write-Log([string] $Text) {
 
 function Test-Admin {
   ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# 桌面快捷方式不带管理员：Test/Install/Remove 不是管理员时自己弹一次 UAC，在新窗口跑完并停住等回车；Status 永远不提权（总检、巡检静默调）。
+if ($Action -ne 'Status' -and -not (Test-Admin)) {
+  if ($PSBoundParameters.ContainsKey('CorePaths')) {
+    Write-Host '带自定义 -CorePaths 时请在管理员终端里直接运行。'
+    if ($Pause) { Read-Host '按回车关闭' | Out-Null }
+    exit 1
+  }
+  $argList = @('-NoProfile', '-File', ('"{0}"' -f $PSCommandPath), '-Action', $Action, '-TunCidr', $TunCidr, '-Pause')
+  Write-Host "「$Action」要管理员权限，马上弹一次 UAC，请点「是」；之后在新窗口里进行。"
+  try { Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -ArgumentList $argList -ErrorAction Stop }
+  catch {
+    Write-Host ('没拿到管理员权限（UAC 被拒绝或取消）：' + $_.Exception.Message)
+    if ($Pause) { Read-Host '按回车关闭' | Out-Null }
+    exit 1
+  }
+  exit 0
 }
 
 Add-Type -LiteralPath (Join-Path $PSScriptRoot '全局断网过滤.cs')
@@ -115,8 +134,8 @@ function Invoke-Test {
 if ($Json -and $Action -eq 'Status') {
   $persistent = @($ks::Status() | Where-Object { $_ -and $_.Persistent }).Count
   $evidence = if ($persistent -eq 9) { '9 条常驻过滤都在：Clash/TUN 不在时整机无外网' }
-    elseif ($persistent -eq 0) { '没装（或被急救命令解除了）：Clash/TUN 不在时其他程序会直连；双击桌面「全局断网开关-安装.cmd」重装' }
-    else { "只剩 $persistent/9 条常驻过滤，开关不完整；双击桌面「全局断网开关-安装.cmd」重装" }
+    elseif ($persistent -eq 0) { '没装（或被急救命令解除了）：Clash/TUN 不在时其他程序会直连；双击桌面「全局断网开关-安装」图标重装' }
+    else { "只剩 $persistent/9 条常驻过滤，开关不完整；双击桌面「全局断网开关-安装」图标重装" }
   [pscustomobject]@{ Succeeded = ($persistent -eq 9); Installed = $persistent; Evidence = $evidence } | ConvertTo-Json -Compress
   return
 }

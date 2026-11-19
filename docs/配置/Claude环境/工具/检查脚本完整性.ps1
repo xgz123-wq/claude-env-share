@@ -74,6 +74,7 @@ $required = @(
   'Desktop防护\一键更新ClaudeDesktop.ps1'
   'Desktop防护\更新ClaudeDesktop.ps1'
   'Desktop防护\应用直连防护管理.ps1'
+  'Desktop防护\全局断网开关.ps1'
   '部署清单.示例.json'
   '工具\读部署清单.ps1'
   '工具\读防护凭证.ps1'
@@ -82,6 +83,7 @@ $required = @(
   '工具\读Claude规则.ps1'
   '工具\生成架构讲解.ps1'
   '说明\架构讲解.html'
+  '说明\断网急救.txt'
 )
 $missing = @($required | Where-Object { -not (Test-Path -LiteralPath (Join-Path $envRoot $_)) })
 if ($missing) { foreach ($m in $missing) { Add-Result FAIL '必需文件' "缺少 $m" } }
