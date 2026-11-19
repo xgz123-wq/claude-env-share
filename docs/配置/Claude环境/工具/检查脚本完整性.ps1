@@ -1,5 +1,5 @@
 #requires -Version 7.0
-# 只读检查 docs\配置\Claude环境\ 这一套脚本和文档有没有被改断：语法、相对路径、卫士依赖的入口、桌面图标目标、文档链接。
+# 只读检查 docs\配置\Claude环境\ 这一套脚本和文档有没有被改断：语法、相对路径、卫士依赖的入口、桌面图标目标、文档链接；在分享包里还扫个人信息。
 # 2026-10-26 整合后替代 Skill 的 Check-SuiteIntegrity.ps1；改了脚本或文档、搬了文件后跑一次，要求 0 FAIL。
 # 不联网、不提权、不启动任何程序。运行：pwsh -NoProfile -File <本脚本>
 [CmdletBinding()]
@@ -61,7 +61,7 @@ $broken = foreach ($s in $scripts) {
 if ($broken) { foreach ($b in $broken) { Add-Result FAIL '相对路径' $b } }
 else { Add-Result PASS '相对路径' "$checked 处引用全部存在" }
 
-# 4. 环境卫士与桌面图标依赖的入口（改名或搬家会让卫士按钮失效）
+# 4. 环境卫士、桌面图标、计划任务依赖的入口（改名或搬家会让卫士按钮失效、巡检计划任务悄悄停掉）
 $required = @(
   'README.md'
   'Claude环境一键总检.ps1'
@@ -82,6 +82,7 @@ $required = @(
   '工具\Clash内核管道.ps1'
   '工具\读Claude规则.ps1'
   '工具\生成架构讲解.ps1'
+  '工具\后台出口巡检.ps1'
   '说明\架构讲解.html'
   '说明\断网急救.txt'
 )
@@ -167,6 +168,25 @@ if (Test-Path -LiteralPath $guardRangeFile) {
   $guardRanges = @([regex]::Matches([IO.File]::ReadAllText($guardRangeFile), 'RuleID: `([^`]+)`, CIDR: "([^"]+)"') | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value)" } | Sort-Object)
   if (-not $scriptRanges -or (Compare-Object $scriptRanges $guardRanges)) { Add-Result FAIL '卫士网段表' "网段脚本：$($scriptRanges -join '、')；卫士 local.go：$($guardRanges -join '、')；改网段后要同步卫士并重新打包" }
   else { Add-Result PASS '卫士网段表' "卫士 S7 的 $($guardRanges.Count) 个网段与 Anthropic网段直连阻断.ps1 一致" }
+}
+
+# 9. 个人信息扫描：只在发布出去的仓库（项目根有 git 远程，也就是分享包）里扫。扫描词放在仓库外的本机文件里，
+#    一行一个，# 开头是注释；词表本身含个人信息，绝不能进仓库。别人的机器上没有这个文件，就跳过。
+$scanWordFile = Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\个人信息扫描词.txt'
+$published = [bool](git -C $projectRoot remote 2>$null)
+if ($published -and (Test-Path -LiteralPath $scanWordFile)) {
+  $words = @(Get-Content -LiteralPath $scanWordFile -Encoding utf8 | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+  $textFiles = @(Get-ChildItem -LiteralPath $projectRoot -Recurse -File | Where-Object { $_.FullName -notmatch '\\\.git\\' -and $_.Extension -notin '.png', '.jpg', '.jpeg', '.ico', '.exe', '.msix', '.zip' })
+  $leaks = foreach ($f in $textFiles) {
+    $lines = [IO.File]::ReadAllLines($f.FullName)
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+      for ($w = 0; $w -lt $words.Count; $w++) {
+        if ($lines[$i].IndexOf($words[$w], [StringComparison]::OrdinalIgnoreCase) -ge 0) { '{0}:{1} 命中第 {2} 个扫描词' -f (Get-Relative $f.FullName), ($i + 1), ($w + 1) }
+      }
+    }
+  }
+  if ($leaks) { foreach ($l in $leaks) { Add-Result FAIL '个人信息扫描' $l } }
+  else { Add-Result PASS '个人信息扫描' "$($textFiles.Count) 个文件、$($words.Count) 个扫描词，0 命中" }
 }
 
 $color = @{ PASS = 'Green'; WARN = 'Yellow'; FAIL = 'Red' }

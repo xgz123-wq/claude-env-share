@@ -48,7 +48,7 @@
 
 | 入口 | 路线 |
 |---|---|
-| Claude Code CLI / VS Code 插件 | HTTP `43865`，Claude 域名按规则进 `ACCOUNT-US` |
+| Claude Code CLI / VS Code 插件 | HTTP `43865`，按规则进 `ACCOUNT-US`（Clash 切到直连模式时会跟着直连，所以只用规则模式；见[部署提示词「已接受的风险」](部署提示词.md)） |
 | 专用 Chrome | SOCKS `43866 → ACCOUNT-US` |
 | Claude Desktop | HTTP `43867 → ACCOUNT-US` |
 
