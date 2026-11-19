@@ -164,6 +164,28 @@ try {
   Add-Result FAIL '入口页与规则一致' $_.Exception.Message
 }
 
+# 7b. 部署提示词的代码块要能整段复制出去单独用，所以抄了一份 Claude 规则；以 JS 为准，这里核对两边的域名、IP 段、ASN、geosite 一致。
+try {
+  . (Join-Path $PSScriptRoot '读Claude规则.ps1')
+  $promptText = [IO.File]::ReadAllText((Join-Path $envRoot '部署提示词.md'))
+  if ($promptText -notmatch '(?s)1\. Claude 自家的域名和地址走出口组。(.*?)\r?\n2\. ') { throw '部署提示词里找不到「1. Claude 自家的域名和地址走出口组。」到「2.」这一段' }
+  $promptBlock = $Matches[1]
+  $promptSet = @(@([regex]::Matches($promptBlock, '[0-9a-f:.]+/\d+|(?<=ASN )\d+|[a-z0-9-]+(?:\.[a-z0-9-]+)+') | ForEach-Object Value) +
+    @([regex]::Matches($promptBlock, 'geosite 的 (\S+) 分类') | ForEach-Object { 'geosite:' + $_.Groups[1].Value }) | Sort-Object -Unique)
+  $jsSet = @(Get-ClaudeRuleList).Rules | ForEach-Object {
+    $parts = $_ -split ','
+    if ($parts[0] -eq 'GEOSITE') { 'geosite:' + $parts[1] } else { $parts[1] }
+  } | Sort-Object -Unique
+  $diff = @(Compare-Object @($jsSet) $promptSet)
+  if ($diff) {
+    $onlyJs = @($diff | Where-Object SideIndicator -eq '<=' | ForEach-Object InputObject)
+    $onlyPrompt = @($diff | Where-Object SideIndicator -eq '=>' | ForEach-Object InputObject)
+    Add-Result FAIL '部署提示词规则' ("和 JS 规则清单不一致；只在 JS：{0}；只在提示词：{1}。以 JS 为准改提示词" -f ($onlyJs -join '、'), ($onlyPrompt -join '、'))
+  } else { Add-Result PASS '部署提示词规则' "提示词第 1 条规则的 $($promptSet.Count) 项与 JS 规则清单一致" }
+} catch {
+  Add-Result FAIL '部署提示词规则' $_.Exception.Message
+}
+
 # 8. 环境卫士 S7 的网段表：它是卫士一键修复的白名单，故意写死在 Go 里，所以这里核对它和网段脚本一致；没传 -GuardSource（分享包用户没有卫士源码）就跳过。
 $guardRangeFile = if ($GuardSource) { Join-Path $GuardSource 'internal\facts\local.go' } else { '' }
 if ($GuardSource -and -not (Test-Path -LiteralPath $guardRangeFile)) { Add-Result FAIL '卫士网段表' "-GuardSource 下找不到 internal\facts\local.go：$GuardSource" }
