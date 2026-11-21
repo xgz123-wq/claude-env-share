@@ -59,7 +59,6 @@ function Run-Step([string]$Name, [string]$Script, [string[]]$Arguments, [switch]
 function Remove-UsedPackages([string]$KeepVersion) {
     # 只删两个固定目录里 Claude-<版本>.msix 形态的安装包；更新成功后它们不再参与恢复或降级。
     # 只留刚装好的这一版，旧版一律删（2026-11-20 用户定：要回退就从官方重新下载，不在本机存旧包）。
-    # 代价：刚被替换的旧版删得慢（10-23 实测 175.8 秒），UAC 窗口会多等一会儿。
     $removed = @(); $kept = @(); $errors = @()
     # Codex 等 MSIX 打包应用发起时，下载目录被重定向到 Packages\<包>\LocalCache\Local，一并清理。
     $directories = @((Join-Path $env:ProgramData 'ClaudeNetworkGuard'),(Join-Path $env:LOCALAPPDATA 'ClaudeNetworkGuard\Desktop安装包下载')) + @(Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA 'Packages\*\LocalCache\Local\ClaudeNetworkGuard\Desktop安装包下载') -Directory -ErrorAction SilentlyContinue | ForEach-Object FullName)
@@ -181,7 +180,6 @@ try {
     $result.HashCount = @($verified.Targets | Where-Object BinaryUnchanged).Count
     $result.FiltersCount = @($verified.Targets | ForEach-Object Filters).Count
     if ($result.HashCount -ne 4 -or $result.FiltersCount -ne 8) { throw '预期的四个程序文件或八条防护规则不完整。' }
-    # 2026-10-26 起 Skill 不再保存脚本与状态副本，这里不再同步。
     $summaryArgs = @()
     if ($ChangedOnly) { $summaryArgs = @('-Scope','Guard') }
     $result.SummaryScope = if ($ChangedOnly) { 'Guard' } else { 'All' }
