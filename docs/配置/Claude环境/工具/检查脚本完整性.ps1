@@ -68,7 +68,7 @@ else { Add-Result PASS '相对路径' "$checked 处引用全部存在" }
 $required = @(
   'README.md'
   'Claude环境一键总检.ps1'
-  '启动Claude英文浏览器.ps1'
+  'Claude桌面启动器.ps1'
   'Anthropic网段直连阻断.ps1'
   'Clash\Clash全局账号通道.js'
   'Clash\验证Clash账号专用通道.ps1'

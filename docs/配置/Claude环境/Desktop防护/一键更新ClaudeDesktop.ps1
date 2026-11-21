@@ -188,7 +188,7 @@ try {
     $result.Checks = [ordered]@{PASS=0;WARN=0;FAIL=0;MANUAL=0}
     foreach ($label in @('PASS','WARN','FAIL','MANUAL')) { $result.Checks[$label] = [regex]::Matches($summary, ('(?m)^\[' + $label + '\s*\]')).Count }
     if ($summaryExit -ne 0 -or $result.Checks.FAIL -gt 0 -or $result.Checks.PASS -eq 0) { throw '日常总检存在失败；详见本次日志。' }
-    $null = Run-Step '启动条件检查' (Join-Path (Split-Path $source -Parent) '启动Claude英文浏览器.ps1') @('-CheckOnly')
+    $null = Run-Step '启动条件检查' (Join-Path (Split-Path $source -Parent) 'Claude桌面启动器.ps1') @('-CheckOnly')
     Assert-Closed
     # 只在全部核验通过后清理；失败时安装包要留给 -ResumeJournal 续接。
     if ($Action -eq 'Update') {

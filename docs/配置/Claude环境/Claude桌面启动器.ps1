@@ -1,5 +1,5 @@
 #requires -Version 7.0
-# Claude Desktop 英文启动器（桌面「Claude-英文浏览器」；环境卫士按 -CheckOnly 调）：查 Desktop 版本与直连防护、固定代理、Clash 路由、
+# Claude 桌面启动器（桌面「Claude-桌面启动器」；环境卫士按 -CheckOnly 调；2026-11-21 前叫 启动Claude英文浏览器.ps1，它不是浏览器）：查 Desktop 版本与直连防护、固定代理、Clash 路由、
 # Desktop 端口归属与出口（Claude 眼里的国家须在部署清单「允许的出口国家」里，默认 US），全过才以 en-US 启动；关掉本窗口即退出 Claude。
 # 不用管理员；-CheckOnly 只检查不启动。Claude 已在运行时拒绝（已有进程不会重新加载语言参数）。
 [CmdletBinding()]
@@ -195,7 +195,7 @@ try {
 
     Register-ClaudeCloseGuard -ExePath $exe
     Start-Process -FilePath $exe -ArgumentList '--lang=en-US','--accept-lang=en-US,en'
-    Write-Host '启动前检查全部通过，已启动 Claude 英文浏览器。' -ForegroundColor Green
+    Write-Host '启动前检查全部通过，已用英文界面启动 Claude Desktop。' -ForegroundColor Green
     Write-Host '关闭本窗口 = 退出 Claude（连同后台进程一起结束）；从托盘退出 Claude 后本窗口自动关闭。'
     # 守到 Claude 退出：窗口始终在，关窗处理才有机会执行。
     while (Get-Process -Name claude -ErrorAction SilentlyContinue | Where-Object Path -eq $exe) {
