@@ -24,8 +24,6 @@ $guardState = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应
 $guardVerify = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用直连防护-Verify.json'
 $guardInstall = Join-Path $projectRoot 'docs\配置\Claude环境\Desktop防护\应用直连防护-最近操作.json'
 $rangeCheck = Join-Path $PSScriptRoot 'Anthropic网段直连阻断.ps1'
-$desktopConfigRoot = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
-$desktopMeta = Join-Path $desktopConfigRoot '_meta.json'
 $manifestWriter = Join-Path $PSScriptRoot '工具\写部署清单.ps1'
 
 # 部署清单：先按 Clash 运行配置和桌面快捷方式刷新一次（内容没变不写），再按名字取端口；-Scope Guard 在 UAC 里跑，只读不刷新。
@@ -230,33 +228,16 @@ if ($Scope -eq 'All') {
   }
 }
 
-# Desktop 的代理：有策略时按策略同层的 egressProxyUrl，本地配置会被忽略，不用读；没有策略才看 configLibrary 里正在用的本地配置（和英文启动器同一顺序）。
-if ($null -ne $machineClaudePolicy.disableAutoUpdates) {
-  if ($machineClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
-    Add-Result PASS 'Claude Desktop 本地代理' "HKLM egressProxyUrl=$expectedDesktopProxy"
-  } else {
-    Add-Result FAIL 'Claude Desktop 本地代理' "HKLM 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
-  }
-} elseif ($null -ne $userClaudePolicy.disableAutoUpdates) {
-  if ($userClaudePolicy.egressProxyUrl -eq $expectedDesktopProxy) {
-    Add-Result PASS 'Claude Desktop 本地代理' "HKCU egressProxyUrl=$expectedDesktopProxy"
-  } else {
-    Add-Result FAIL 'Claude Desktop 本地代理' "HKCU 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
-  }
-} elseif (-not (Test-Path -LiteralPath $desktopMeta)) {
-  Add-Result FAIL 'Claude Desktop 本地代理' '没有 Claude 策略，也缺少 configLibrary 元数据'
+# Desktop 的代理：判定和英文启动器共用 读防护凭证.ps1 的 Get-DesktopProxySetting（HKLM → HKCU → 本地配置）。
+$desktopProxy = Get-DesktopProxySetting
+if ($desktopProxy.Problem) {
+  Add-Result FAIL 'Claude Desktop 本地代理' $desktopProxy.Problem
+} elseif ($desktopProxy.Value -eq $expectedDesktopProxy) {
+  Add-Result PASS 'Claude Desktop 本地代理' "$($desktopProxy.Source) egressProxyUrl=$expectedDesktopProxy"
+} elseif ($desktopProxy.Source -eq '本地配置') {
+  Add-Result FAIL 'Claude Desktop 本地代理' "当前应用配置没有指向 $portDesktop"
 } else {
-  try {
-    $meta = Get-Content -LiteralPath $desktopMeta -Raw | ConvertFrom-Json
-    $profile = Get-Content -LiteralPath (Join-Path $desktopConfigRoot ($meta.appliedId + '.json')) -Raw | ConvertFrom-Json
-    if ($profile.egressProxyUrl -eq $expectedDesktopProxy) {
-      Add-Result PASS 'Claude Desktop 本地代理' "本地 egressProxyUrl=$expectedDesktopProxy"
-    } else {
-      Add-Result FAIL 'Claude Desktop 本地代理' "当前应用配置没有指向 $portDesktop"
-    }
-  } catch {
-    Add-Result FAIL 'Claude Desktop 本地代理' '无法读取当前应用配置'
-  }
+  Add-Result FAIL 'Claude Desktop 本地代理' "$($desktopProxy.Source) 设置了应用行为策略，但同层缺少 $portDesktop；本地配置会被忽略"
 }
 
 $machineUpdatePolicy = $machineClaudePolicy.disableAutoUpdates
@@ -283,40 +264,7 @@ if (Test-Path -LiteralPath $guardManifest) {
     $manifestHash = (Get-FileHash -LiteralPath $guardManifest -Algorithm SHA256).Hash
     $package = Get-AppxPackage -Name Claude -ErrorAction SilentlyContinue
     $targets = @($manifest.Targets)
-    $pluginTargets = @($targets | Where-Object Name -eq 'Claude Code VS Code 插件')
-    $pluginRegistry = Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
-    $currentPluginPath = $null
-    $pluginPathProblem = ''
-    if (-not (Test-Path -LiteralPath $pluginRegistry)) {
-      $pluginPathProblem = '缺少 VS Code extensions.json，无法确认当前插件路径'
-    } else {
-      $pluginRecords = @((Get-Content -LiteralPath $pluginRegistry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
-      if ($pluginRecords.Count -ne 1) {
-        $pluginPathProblem = "VS Code 当前登记的 Claude Code 插件数量为 $($pluginRecords.Count)，预期 1"
-      } elseif ($pluginRecords[0].metadata.pinned -ne $true) {
-        $pluginPathProblem = 'VS Code Claude Code 插件未固定版本，自动更新可能更换未受保护的路径'
-      } elseif ([string]$pluginRecords[0].metadata.targetPlatform -ne 'win32-x64') {
-        $pluginPathProblem = "VS Code Claude Code 插件平台为 $($pluginRecords[0].metadata.targetPlatform)，预期 win32-x64"
-      } else {
-        $pluginRoot = [string]$pluginRecords[0].location.path
-        if ($pluginRoot -match '^/([A-Za-z]:/.*)$') { $pluginRoot = $Matches[1] }
-        $pluginRoot = $pluginRoot.Replace('/','\')
-        $currentPluginPath = Join-Path $pluginRoot 'resources\native-binary\claude.exe'
-      }
-    }
-    if ($pluginTargets.Count -ne 1) {
-      $pluginPathProblem = "防护清单里的 VS Code 插件目标数量为 $($pluginTargets.Count)，预期 1"
-    } elseif ($currentPluginPath -and $pluginTargets[0].Path -ine $currentPluginPath) {
-      $pluginPathProblem = "VS Code 插件路径已变化：当前=$currentPluginPath；防护=$($pluginTargets[0].Path)"
-    }
-    $vsCodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
-    if (-not $pluginPathProblem -and (Test-Path -LiteralPath $vsCodeSettings)) {
-      $settingsText = Get-Content -LiteralPath $vsCodeSettings -Raw
-      $wrapperMatch = [regex]::Match($settingsText, '"claudeCode\.claudeProcessWrapper"\s*:\s*"([^"]*)"')
-      if ($wrapperMatch.Success -and $wrapperMatch.Groups[1].Value.Trim()) {
-        $pluginPathProblem = 'VS Code 配置了 claudeProcessWrapper，实际启动程序不再是受保护的插件 claude.exe'
-      }
-    }
+    $pluginPathProblem = Get-PluginGuardProblem $targets
     $binaryChecks = @($targets | ForEach-Object { [pscustomobject]@{Target=$_;AcceptedBy=(Test-GuardBinary $_)} })
     $validTargets = @($binaryChecks | Where-Object AcceptedBy | ForEach-Object Target)
     $signedCli = @($binaryChecks | Where-Object AcceptedBy -eq 'signature' | ForEach-Object { $_.Target.Name })

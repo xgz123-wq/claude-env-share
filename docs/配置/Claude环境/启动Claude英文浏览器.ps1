@@ -21,41 +21,11 @@ $guardManifestPath = Join-Path $guardDirectory '应用过滤目标.json'
 $guardStatePath = Join-Path $guardDirectory '应用直连防护状态.json'
 $guardVerifyPath = Join-Path $guardDirectory '应用直连防护-Verify.json'
 $guardInstallPath = Join-Path $guardDirectory '应用直连防护-最近操作.json'
-$configRoot = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
 $clashRuntime = $deployClashRuntime
 
 function Write-Pass {
     param([string]$Message)
     Write-Host ('[PASS] ' + $Message) -ForegroundColor Green
-}
-
-function Get-EffectiveClaudeProxy {
-    $machinePolicy = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Claude' -ErrorAction SilentlyContinue
-    $userPolicy = Get-ItemProperty -Path 'HKCU:\SOFTWARE\Policies\Claude' -ErrorAction SilentlyContinue
-    $machineManaged = ($null -ne $machinePolicy.disableAutoUpdates) -or (-not [string]::IsNullOrWhiteSpace([string]$machinePolicy.egressProxyUrl))
-    $userManaged = ($null -ne $userPolicy.disableAutoUpdates) -or (-not [string]::IsNullOrWhiteSpace([string]$userPolicy.egressProxyUrl))
-
-    if ($machineManaged) {
-        return [pscustomobject]@{ Source = 'HKLM 策略'; Value = [string]$machinePolicy.egressProxyUrl }
-    }
-    if ($userManaged) {
-        return [pscustomobject]@{ Source = 'HKCU 策略'; Value = [string]$userPolicy.egressProxyUrl }
-    }
-
-    $metaPath = Join-Path $configRoot '_meta.json'
-    if (-not (Test-Path -LiteralPath $metaPath)) {
-        throw '找不到 Claude Desktop 当前配置，无法确认固定代理。'
-    }
-    $meta = Get-Content -LiteralPath $metaPath -Raw | ConvertFrom-Json
-    if ([string]::IsNullOrWhiteSpace([string]$meta.appliedId)) {
-        throw 'Claude Desktop 当前配置没有有效的 appliedId。'
-    }
-    $profilePath = Join-Path $configRoot ($meta.appliedId + '.json')
-    if (-not (Test-Path -LiteralPath $profilePath)) {
-        throw '找不到 Claude Desktop 当前配置文件。'
-    }
-    $profile = Get-Content -LiteralPath $profilePath -Raw | ConvertFrom-Json
-    return [pscustomobject]@{ Source = '本地配置'; Value = [string]$profile.egressProxyUrl }
 }
 
 # 直连防护凭证判定和一键总检共用一份。
@@ -75,26 +45,8 @@ function Assert-GuardEvidence {
     $install = Get-Content -LiteralPath $guardInstallPath -Raw | ConvertFrom-Json
     $manifestHash = (Get-FileHash -LiteralPath $guardManifestPath -Algorithm SHA256).Hash
 
-    $pluginTargets = @($manifest.Targets | Where-Object Name -eq 'Claude Code VS Code 插件')
-    $pluginRegistry = Join-Path $env:USERPROFILE '.vscode\extensions\extensions.json'
-    if ($pluginTargets.Count -ne 1 -or -not (Test-Path -LiteralPath $pluginRegistry)) {
-        throw 'VS Code Claude Code 插件的直连防护清单或当前登记不完整。'
-    }
-    $pluginRecords = @((Get-Content -LiteralPath $pluginRegistry -Raw | ConvertFrom-Json) | Where-Object { $_.identifier.id -ieq 'anthropic.claude-code' })
-    if ($pluginRecords.Count -ne 1 -or $pluginRecords[0].metadata.pinned -ne $true) {
-        throw 'VS Code Claude Code 插件未唯一登记或未固定版本。'
-    }
-    $pluginRoot = [string]$pluginRecords[0].location.path
-    if ($pluginRoot -match '^/([A-Za-z]:/.*)$') { $pluginRoot = $Matches[1] }
-    $currentPluginPath = Join-Path ($pluginRoot.Replace('/','\')) 'resources\native-binary\claude.exe'
-    if ($pluginTargets[0].Path -ine $currentPluginPath) {
-        throw 'VS Code Claude Code 插件已更新换路径，直连防护必须迁移后才能继续。'
-    }
-    $vsCodeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
-    if (Test-Path -LiteralPath $vsCodeSettings) {
-        $wrapperMatch = [regex]::Match((Get-Content -LiteralPath $vsCodeSettings -Raw), '"claudeCode\.claudeProcessWrapper"\s*:\s*"([^"]*)"')
-        if ($wrapperMatch.Success -and $wrapperMatch.Groups[1].Value.Trim()) { throw 'VS Code 配置了未纳入防护的 claudeProcessWrapper。' }
-    }
+    $pluginProblem = Get-PluginGuardProblem $manifest.Targets
+    if ($pluginProblem) { throw $pluginProblem }
 
     if ([string]$manifest.PackageVersion -ne $PackageVersion) {
         throw 'Claude Desktop 已更新，Windows 直连防护尚未迁移到当前版本。'
@@ -198,7 +150,8 @@ try {
     $running = @(Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | Where-Object { $_.ExecutablePath -eq $exe })
     if ($running.Count) { throw '请先完全退出 Claude Desktop，再使用这个入口。已有进程不会重新加载语言参数。' }
 
-    $proxy = Get-EffectiveClaudeProxy
+    $proxy = Get-DesktopProxySetting
+    if ($proxy.Problem) { throw ('无法确认 Claude Desktop 固定代理：' + $proxy.Problem + '。') }
     if ($proxy.Value -ne $expectedProxy) {
         throw "Claude Desktop 固定代理不正确：$($proxy.Source) 当前不是 $expectedProxy。"
     }
